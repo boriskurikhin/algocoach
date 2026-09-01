@@ -9,7 +9,8 @@ manifesto is the product contract.
 
 ## What it does
 
-- Extracts problem statements from DMOJ, Codeforces, USACO, and Advent of Code.
+- Extracts problem statements from LeetCode, DMOJ, Codeforces, USACO, and
+  Advent of Code.
 - Uses a conservative semantic fallback for other problem-setting sites.
 - Lets the learner paste a statement when page recognition is uncertain.
 - Privately builds a solution-aware coaching map with GPT-5.6 Sol.
@@ -196,6 +197,10 @@ clipboard access, site-editor access, or background page surveillance.
 Site adapters use stable semantic selectors where available, but competitive-
 programming sites can change markup without notice. Low-confidence extraction
 is shown to the learner instead of silently pretending to be correct.
+
+LeetCode extraction reads embedded question data when available, falls back to
+the hydrated description, and briefly retries while the SPA is loading.
+Account- or Premium-locked statements still require access or a manual paste.
 
 The generic extractor works best when a page has:
 

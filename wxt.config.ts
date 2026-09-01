@@ -35,6 +35,13 @@ export const extensionHostPermissions = ['https://api.openai.com/*'] as const;
  */
 export const extensionOptionalHostPermissions = ['https://*/*', 'http://*/*'] as const;
 
+const extensionIcons = {
+  16: 'mascot/icon-16.png',
+  32: 'mascot/icon-32.png',
+  48: 'mascot/icon-48.png',
+  128: 'mascot/icon-128.png',
+};
+
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   vite: () => ({ plugins: [katexWoff2Only()] }),
@@ -47,8 +54,10 @@ export default defineConfig({
     permissions: [...extensionPermissions],
     host_permissions: [...extensionHostPermissions],
     optional_host_permissions: [...extensionOptionalHostPermissions],
+    icons: extensionIcons,
     action: {
       default_title: 'Open Socratic Algo Coach',
+      default_icon: extensionIcons,
     },
   },
 });

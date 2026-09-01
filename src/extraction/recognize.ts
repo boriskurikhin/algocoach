@@ -2,6 +2,7 @@ import { adventOfCodeAdapter } from './adapters/advent-of-code';
 import { codeforcesAdapter } from './adapters/codeforces';
 import { dmojAdapter } from './adapters/dmoj';
 import { genericAdapter } from './adapters/generic';
+import { leetcodeAdapter } from './adapters/leetcode';
 import type { ProblemAdapterConfig } from './adapters/types';
 import { usacoAdapter } from './adapters/usaco';
 import type { ProblemContext } from './schema';
@@ -11,6 +12,7 @@ const knownAdapters: ProblemAdapterConfig[] = [
   codeforcesAdapter,
   usacoAdapter,
   adventOfCodeAdapter,
+  leetcodeAdapter,
 ];
 
 export function adapterForUrl(url: string): ProblemAdapterConfig {

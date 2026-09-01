@@ -153,6 +153,89 @@ export const adventOfCodeHtml = `
   </body></html>
 `;
 
+const leetcodeContent = `
+  <p>Given an array of integers <code>nums</code> and an integer target, return
+  the two indices whose values add to the target. ${longStatement}</p>
+  <p><strong>Example 1:</strong></p>
+  <pre><strong>Input:</strong> nums = [2,7,11,15], target = 9
+<strong>Output:</strong> [0,1]
+<strong>Explanation:</strong> nums[0] + nums[1] equals 9.</pre>
+  <p><strong>Constraints:</strong></p>
+  <ul>
+    <li>2 ≤ nums.length ≤ 10<sup>4</sup></li>
+    <li>-10<sup>9</sup> ≤ nums[i], target ≤ 10<sup>9</sup></li>
+  </ul>
+`;
+
+export const leetcodeEmbeddedHtml = `
+  <html><head><title>Two Sum - LeetCode</title></head>
+  <body>
+    <script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
+      props: {
+        pageProps: {
+          dehydratedState: {
+            queries: [
+              {
+                state: {
+                  data: {
+                    question: {
+                      questionId: '1',
+                      questionFrontendId: '1',
+                      title: 'Two Sum',
+                      titleSlug: 'two-sum',
+                      content: leetcodeContent,
+                      difficulty: 'Easy',
+                      isPaidOnly: false,
+                      topicTags: [
+                        { name: 'Array', slug: 'array' },
+                        { name: 'Hash Table', slug: 'hash-table' },
+                      ],
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    })}</script>
+  </body></html>
+`;
+
+export const leetcodeDomHtml = `
+  <html><head><title>Two Sum - LeetCode</title></head>
+  <body>
+    <div data-cy="question-title">1. Two Sum</div>
+    <div class="text-difficulty-easy">Easy</div>
+    <a data-cy="topic-tag" href="/tag/array/">Array</a>
+    <div data-track-load="description_content">${leetcodeContent}</div>
+    <div class="monaco-editor">EDITOR CONTENT MUST NOT ENTER</div>
+  </body></html>
+`;
+
+export const leetcodeLockedHtml = `
+  <html><head><title>Premium Problem - LeetCode</title></head>
+  <body>
+    <script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
+      props: {
+        pageProps: {
+          question: {
+            questionId: '999',
+            title: 'Premium Problem',
+            titleSlug: 'premium-problem',
+            content: null,
+            difficulty: 'Hard',
+            isPaidOnly: true,
+          },
+        },
+      },
+    })}</script>
+    <div data-track-load="description_content">
+      Subscribe to unlock this Premium subscription problem.
+    </div>
+  </body></html>
+`;
+
 export const genericProblemHtml = `
   <html><head><title>Independent Judge</title></head>
   <body>

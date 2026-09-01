@@ -5,6 +5,7 @@ const ProblemSiteSchema = z.enum([
   'codeforces',
   'usaco',
   'advent-of-code',
+  'leetcode',
   'generic',
 ]);
 

@@ -24,6 +24,18 @@
   margin: 0;
 }
 
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.brand-mark {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+}
+
 .notice {
   margin-bottom: var(--space-6);
 }
@@ -35,6 +47,10 @@
 .problem-meta {
   color: var(--ink-muted);
   font-size: var(--text-xs);
+}
+
+.problem-section {
+  position: relative;
 }
 
 .problem-preview {
@@ -63,7 +79,7 @@
   position: sticky;
   z-index: 3;
   top: 0;
-  align-items: flex-start;
+  align-items: center;
   padding: var(--space-3) 0;
   background: var(--paper);
   border-bottom: 1px solid var(--border);
@@ -72,6 +88,7 @@
 .session-summary {
   flex: 1;
   min-width: 0;
+  padding-right: 4rem;
 }
 
 .session-heading h2 {
@@ -87,6 +104,59 @@
   color: var(--ink-muted);
   font-size: var(--text-xs);
   line-height: 1.5;
+}
+
+.coach-mascot {
+  position: absolute;
+  z-index: 4;
+  width: 4rem;
+  margin: 0;
+  color: var(--ink-muted);
+  pointer-events: none;
+  text-align: center;
+}
+
+.problem-section > .coach-mascot {
+  top: 0;
+  right: 4.25rem;
+}
+
+.session-heading > .coach-mascot {
+  top: 0;
+  right: 6.5rem;
+}
+
+.coach-mascot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 2px 1px color-mix(in srgb, var(--ink) 12%, transparent));
+  transform-origin: 50% 88%;
+  user-select: none;
+}
+
+.coach-mascot[data-mascot-state='idle'] img,
+.coach-mascot[data-mascot-state='greeting'] img,
+.coach-mascot[data-mascot-state='clarify'] img,
+.coach-mascot[data-mascot-state='support'] img,
+.coach-mascot[data-mascot-state='complete'] img {
+  animation: mascot-float 3s ease-in-out infinite;
+}
+
+.coach-mascot[data-mascot-state='typing'] img,
+.coach-mascot[data-mascot-state='reading'] img,
+.coach-mascot[data-mascot-state='thinking'] img {
+  animation: mascot-breathe 1.7s ease-in-out infinite;
+}
+
+.coach-mascot[data-mascot-state='coaching'] img,
+.coach-mascot[data-mascot-state='nudge'] img {
+  animation: mascot-gesture 0.7s ease-out both;
+}
+
+.coach-mascot[data-mascot-state='aha'] img,
+.coach-mascot[data-mascot-state='celebrate'] img {
+  animation: mascot-pop 0.65s ease-out both;
 }
 
 .conversation {
@@ -196,8 +266,48 @@ footer {
   }
 }
 
+@keyframes mascot-float {
+  50% {
+    transform: translateY(-0.18rem);
+  }
+}
+
+@keyframes mascot-breathe {
+  50% {
+    transform: translateY(-0.12rem) scale(1.015);
+  }
+}
+
+@keyframes mascot-gesture {
+  45% {
+    transform: rotate(-1.5deg) scale(1.035);
+  }
+}
+
+@keyframes mascot-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(0.35rem) scale(0.88);
+  }
+
+  65% {
+    transform: translateY(-0.08rem) scale(1.04);
+  }
+}
+
+@media (max-width: 28rem) {
+  .session-heading {
+    gap: var(--space-2);
+  }
+
+  .coach-mascot {
+    width: 3.5rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .status-dot {
+  .status-dot,
+  .coach-mascot img {
     animation: none;
   }
 }

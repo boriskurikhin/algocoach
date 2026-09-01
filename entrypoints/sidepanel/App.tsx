@@ -12,6 +12,12 @@ import {
   SESSION_COST_ESTIMATE_NOTE,
   type SessionUsage,
 } from '../../src/agent/usage';
+import { CoachMascot } from '../../src/components/CoachMascot';
+import {
+  coachMascotMomentForStageChange,
+  deriveCoachMascotState,
+  type CoachMascotMoment,
+} from '../../src/components/coach-mascot-state';
 import { MathText } from '../../src/components/MathText';
 import { MessageContent } from '../../src/components/MessageContent';
 import { manualProblemContext } from '../../src/extraction/recognize';
@@ -129,9 +135,31 @@ export default function App() {
   const [status, setStatus] = useState<StatusState | null>(null);
   const [statusClock, setStatusClock] = useState(Date.now);
   const [error, setError] = useState('');
+  const [mascotMoment, setMascotMoment] = useState<CoachMascotMoment | null>(null);
   const portRef = useRef<CoachPort | null>(null);
   const connectPortRef = useRef<() => CoachPort | null>(() => null);
   const requestInFlightRef = useRef(false);
+  const stageRef = useRef<CoachStage>('listen');
+  const mascotMomentTimerRef = useRef<number | null>(null);
+
+  const resetMascotMoment = useCallback(() => {
+    if (mascotMomentTimerRef.current !== null) {
+      window.clearTimeout(mascotMomentTimerRef.current);
+      mascotMomentTimerRef.current = null;
+    }
+    setMascotMoment(null);
+  }, []);
+
+  const showMascotMoment = useCallback((moment: CoachMascotMoment) => {
+    if (mascotMomentTimerRef.current !== null) {
+      window.clearTimeout(mascotMomentTimerRef.current);
+    }
+    setMascotMoment(moment);
+    mascotMomentTimerRef.current = window.setTimeout(() => {
+      mascotMomentTimerRef.current = null;
+      setMascotMoment(null);
+    }, 2_600);
+  }, []);
 
   const finishRequest = useCallback(() => {
     requestInFlightRef.current = false;
@@ -147,14 +175,19 @@ export default function App() {
     [finishRequest],
   );
 
-  const applySession = useCallback((session: RestorableSession) => {
-    setSessionId(session.sessionId);
-    setExtraction({ context: session.problem, likelyProblem: true });
-    setStage(session.stage);
-    setMessages(session.messages);
-    setUsage(session.usage);
-    setExtracting(false);
-  }, []);
+  const applySession = useCallback(
+    (session: RestorableSession) => {
+      resetMascotMoment();
+      setSessionId(session.sessionId);
+      setExtraction({ context: session.problem, likelyProblem: true });
+      setStage(session.stage);
+      stageRef.current = session.stage;
+      setMessages(session.messages);
+      setUsage(session.usage);
+      setExtracting(false);
+    },
+    [resetMascotMoment],
+  );
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -238,6 +271,15 @@ export default function App() {
     };
   }, [extract, refreshSettings, restoreSession]);
 
+  useEffect(
+    () => () => {
+      if (mascotMomentTimerRef.current !== null) {
+        window.clearTimeout(mascotMomentTimerRef.current);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     let disposed = false;
     let activeConnection: { port: CoachPort; detach: () => void } | null = null;
@@ -269,10 +311,13 @@ export default function App() {
       } else if (event.type === 'coach:chunk') {
         setDraft((value) => value + event.chunk);
       } else if (event.type === 'coach:reply') {
+        const previousStage = stageRef.current;
         finishRequest();
         setMessages((value) => [...value, event.message]);
         setStage(event.stage);
+        stageRef.current = event.stage;
         setUsage(event.usage);
+        showMascotMoment(coachMascotMomentForStageChange(previousStage, event.stage));
       } else {
         if (event.usage) setUsage(event.usage);
         failRequest(event.message);
@@ -324,7 +369,7 @@ export default function App() {
       if (portRef.current === connection?.port) portRef.current = null;
       connection?.port.disconnect();
     };
-  }, [applySession, failRequest, finishRequest]);
+  }, [applySession, failRequest, finishRequest, showMascotMoment]);
 
   useEffect(() => {
     if (!status) return;
@@ -368,6 +413,8 @@ export default function App() {
       return;
     }
     const now = Date.now();
+    resetMascotMoment();
+    stageRef.current = 'listen';
     setError('');
     setMessages([]);
     setUsage({ ...EMPTY_SESSION_USAGE });
@@ -422,6 +469,7 @@ export default function App() {
       setSessionId(null);
       setMessages([]);
       setUsage({ ...EMPTY_SESSION_USAGE });
+      resetMascotMoment();
       finishRequest();
     } catch (caught) {
       setError(errorMessage(caught, 'Could not close the coaching session.'));
@@ -430,13 +478,34 @@ export default function App() {
 
   const problem = extraction?.context;
   const sessionUsageDetail = usage.modelCalls ? usageDetail(usage) : '';
+  const mascotState = deriveCoachMascotState({
+    sessionId,
+    extracting,
+    status: status?.kind ?? null,
+    draft,
+    composer,
+    error,
+    stage,
+    messageCount: messages.length,
+    moment: mascotMoment,
+  });
 
   return (
     <main className="panel-shell">
       <header className="panel-header">
-        <div>
-          <p className="eyebrow">Socratic</p>
-          <h1>Algo Coach</h1>
+        <div className="brand-lockup">
+          <img
+            className="brand-mark"
+            src="/mascot/icon.png"
+            alt=""
+            width="48"
+            height="48"
+            aria-hidden="true"
+          />
+          <div>
+            <p className="eyebrow">Socratic</p>
+            <h1>Algo Coach</h1>
+          </div>
         </div>
         <button
           className="link-button"
@@ -458,7 +527,7 @@ export default function App() {
       ) : null}
 
       {!sessionId ? (
-        <section aria-labelledby="problem-title">
+        <section className="problem-section" aria-labelledby="problem-title">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Current page</p>
@@ -475,6 +544,7 @@ export default function App() {
               Read again
             </button>
           </div>
+          <CoachMascot state={mascotState} />
 
           {needsAccess ? (
             <section className="notice">
@@ -578,6 +648,7 @@ export default function App() {
                 </p>
               ) : null}
             </div>
+            <CoachMascot state={mascotState} />
             <button
               className="link-button"
               type="button"

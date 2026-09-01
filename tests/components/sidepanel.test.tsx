@@ -108,7 +108,14 @@ describe('side panel coaching flow', () => {
     render(<App />);
 
     expect(await screen.findByText('Batch Sums')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Coach welcomes you' })).toHaveAttribute(
+      'data-mascot-state',
+      'greeting',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Start coaching' }));
+    expect(
+      screen.getByRole('img', { name: 'Coach is reading your reasoning' }),
+    ).toHaveAttribute('data-mascot-state', 'reading');
     expect(mocks.postMessage).toHaveBeenCalledWith({
       type: 'session:start',
       problem: problemFixture,
@@ -128,12 +135,22 @@ describe('side panel coaching flow', () => {
       });
     });
     expect(screen.getByText('What are you thinking so far?')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Coach welcomes you' })).toHaveAttribute(
+      'data-mascot-state',
+      'greeting',
+    );
     expect(screen.getByText(/1\.5K tokens · ≈\$0\.013/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('What are you thinking?'), {
       target: { value: 'I think rounding is involved, but I lose extra units.' },
     });
+    expect(
+      screen.getByRole('img', { name: 'Coach is listening while you type' }),
+    ).toHaveAttribute('data-mascot-state', 'typing');
     fireEvent.click(screen.getByRole('button', { name: 'Ask the coach' }));
+    expect(
+      screen.getByRole('img', { name: 'Coach is reading your reasoning' }),
+    ).toHaveAttribute('data-mascot-state', 'reading');
     expect(screen.getByText(/I think rounding is involved/)).toBeInTheDocument();
     expect(mocks.postMessage).toHaveBeenLastCalledWith({
       type: 'session:user-message',
@@ -149,6 +166,9 @@ describe('side panel coaching flow', () => {
       });
     });
     expect(screen.getByText('Where does the sixth unit go?')).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'Coach is asking a guiding question' }),
+    ).toHaveAttribute('data-mascot-state', 'coaching');
 
     act(() => {
       emit({
@@ -170,6 +190,9 @@ describe('side panel coaching flow', () => {
     await waitFor(() => {
       expect(screen.getByText('Hint stage: clarify')).toBeInTheDocument();
     });
+    expect(
+      screen.getByRole('img', { name: 'Coach noticed a useful insight' }),
+    ).toHaveAttribute('data-mascot-state', 'aha');
     expect(screen.getByText('python')).toBeInTheDocument();
     expect(document.querySelector('.token.builtin')).toHaveTextContent('min');
     expect(screen.getByText('One batch')).toBeInTheDocument();
@@ -271,6 +294,11 @@ describe('side panel coaching flow', () => {
       });
 
       expect(screen.getByRole('alert')).toHaveTextContent('reasoning/output budget');
+      expect(
+        screen.getByRole('img', {
+          name: 'Coach is here to help you get unstuck',
+        }),
+      ).toHaveAttribute('data-mascot-state', 'support');
       expect(screen.queryByText(/10m limit/)).not.toBeInTheDocument();
     } finally {
       view.unmount();

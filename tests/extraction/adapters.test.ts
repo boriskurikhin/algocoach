@@ -3,6 +3,7 @@ import { adventOfCodeAdapter } from '../../src/extraction/adapters/advent-of-cod
 import { codeforcesAdapter } from '../../src/extraction/adapters/codeforces';
 import { dmojAdapter } from '../../src/extraction/adapters/dmoj';
 import { genericAdapter } from '../../src/extraction/adapters/generic';
+import { leetcodeAdapter } from '../../src/extraction/adapters/leetcode';
 import { usacoAdapter } from '../../src/extraction/adapters/usaco';
 import { extractProblemFromDocument } from '../../src/extraction/extract-in-page';
 import {
@@ -18,6 +19,9 @@ import {
   divOnlyProblemHtml,
   dmojHtml,
   genericProblemHtml,
+  leetcodeDomHtml,
+  leetcodeEmbeddedHtml,
+  leetcodeLockedHtml,
   nonProblemHtml,
   usacoHtml,
   usacoMathHtml,
@@ -41,6 +45,15 @@ describe('site recognition', () => {
     ['https://codeforces.com/gym/100001/attachments', 'generic'],
     ['https://dmoj.ca/problem/ccc24s3/submissions', 'generic'],
     ['https://adventofcode.com/2019/day/14/input', 'generic'],
+    ['https://leetcode.com/problems/two-sum/', 'leetcode'],
+    ['https://leetcode.com/problems/two-sum/description/', 'leetcode'],
+    ['https://leetcode.com/problems/two-sum/submissions/', 'leetcode'],
+    [
+      'https://leetcode.com/contest/weekly-contest-400/problems/find-the-answer/',
+      'leetcode',
+    ],
+    ['https://leetcode.cn/problems/two-sum/description/', 'leetcode'],
+    ['https://leetcode.com/problemset/', 'generic'],
     ['https://judge.example/problems/one', 'generic'],
   ])('selects an adapter for %s', (url, site) => {
     expect(adapterForUrl(url).site).toBe(site);
@@ -138,6 +151,58 @@ describe('problem adapters', () => {
     expect(context.statement).toContain('Part Two');
     expect(context.samples[0]?.input).toContain('ORE');
     expect(context.samples[0]?.output).toBe('');
+  });
+
+  it('extracts LeetCode metadata and examples from embedded page data', () => {
+    load(leetcodeEmbeddedHtml);
+    const context = ProblemContextSchema.parse(
+      extractProblemFromDocument(leetcodeAdapter),
+    );
+
+    expect(context.source.site).toBe('leetcode');
+    expect(context.title).toBe('Two Sum');
+    expect(context.statement).toContain('two indices');
+    expect(context.statement).toContain('10^{4}');
+    expect(context.rating).toBe('Easy');
+    expect(context.tags).toEqual(expect.arrayContaining(['Array', 'Hash Table']));
+    expect(context.constraints).toEqual(
+      expect.arrayContaining(['2 ≤ nums.length ≤ 10^{4}']),
+    );
+    expect(context.samples[0]).toEqual({
+      input: 'nums = [2,7,11,15], target = 9',
+      output: '[0,1]',
+      explanation: 'nums[0] + nums[1] equals 9.',
+    });
+    expect(context.warnings).not.toContain(
+      'Input and output sections were not identified separately.',
+    );
+    expect(isLikelyProblem(context)).toBe(true);
+  });
+
+  it('falls back to LeetCode’s hydrated description DOM', () => {
+    load(leetcodeDomHtml);
+    const context = ProblemContextSchema.parse(
+      extractProblemFromDocument(leetcodeAdapter),
+    );
+
+    expect(context.title).toBe('1. Two Sum');
+    expect(context.statement).toContain('two indices');
+    expect(context.statement).not.toContain('EDITOR CONTENT MUST NOT ENTER');
+    expect(context.rating).toBe('Easy');
+    expect(context.tags).toContain('Array');
+    expect(isLikelyProblem(context)).toBe(true);
+  });
+
+  it('does not mistake a locked LeetCode page for a complete statement', () => {
+    load(leetcodeLockedHtml);
+    const context = ProblemContextSchema.parse(
+      extractProblemFromDocument(leetcodeAdapter),
+    );
+
+    expect(context.title).toBe('Premium Problem');
+    expect(context.confidence).toBeLessThan(0.6);
+    expect(context.warnings.join(' ')).toMatch(/account|Premium/i);
+    expect(isLikelyProblem(context)).toBe(false);
   });
 
   it('recognizes a semantic generic problem', () => {

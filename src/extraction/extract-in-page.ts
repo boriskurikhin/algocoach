@@ -165,6 +165,105 @@ export function extractProblemFromDocument(
   const unique = (values: string[]): string[] =>
     Array.from(new Set(values.map((value) => normalize(value, 5_000)))).filter(Boolean);
 
+  const embeddedLeetCode = (() => {
+    if (config.site !== 'leetcode') return null;
+
+    const scriptNodes = [
+      document.getElementById('__NEXT_DATA__'),
+      ...query(['script[type="application/json"]']),
+    ].filter((node): node is Element => Boolean(node));
+    const seen = new Set<Element>();
+    let question: Record<string, unknown> | null = null;
+
+    for (const script of scriptNodes) {
+      if (seen.has(script)) continue;
+      seen.add(script);
+      const source = script.textContent?.trim() ?? '';
+      if (
+        !source ||
+        source.length > 5_000_000 ||
+        !/(?:questionFrontendId|titleSlug|isPaidOnly)/.test(source)
+      ) {
+        continue;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(source);
+      } catch {
+        continue;
+      }
+
+      const stack: unknown[] = [parsed];
+      let visited = 0;
+      while (stack.length > 0 && visited < 20_000) {
+        visited += 1;
+        const value = stack.pop();
+        if (!value || typeof value !== 'object') continue;
+        if (Array.isArray(value)) {
+          for (const item of value) stack.push(item);
+          continue;
+        }
+
+        const candidate = value as Record<string, unknown>;
+        const hasTitle =
+          typeof candidate.title === 'string' ||
+          typeof candidate.translatedTitle === 'string';
+        const hasContentField =
+          Object.hasOwn(candidate, 'content') ||
+          Object.hasOwn(candidate, 'translatedContent');
+        const hasQuestionIdentity =
+          typeof candidate.titleSlug === 'string' ||
+          typeof candidate.questionFrontendId === 'string' ||
+          typeof candidate.questionId === 'string';
+        if (hasTitle && hasContentField && hasQuestionIdentity) {
+          question = candidate;
+          break;
+        }
+        stack.push(...Object.values(candidate));
+      }
+      if (question) break;
+    }
+
+    if (!question) return null;
+    const preferTranslated = location.hostname.endsWith('.cn');
+    const firstString = (...values: unknown[]): string =>
+      values.find((value): value is string => typeof value === 'string') ?? '';
+    const title = normalize(
+      preferTranslated
+        ? firstString(question.translatedTitle, question.title)
+        : firstString(question.title, question.translatedTitle),
+      500,
+    );
+    const content = preferTranslated
+      ? firstString(question.translatedContent, question.content)
+      : firstString(question.content, question.translatedContent);
+    const template = document.createElement('template');
+    template.innerHTML = content;
+    const contentRoot = document.createElement('div');
+    contentRoot.append(template.content.cloneNode(true));
+    const topicTags = Array.isArray(question.topicTags)
+      ? question.topicTags
+          .map((tag) => {
+            if (!tag || typeof tag !== 'object') return '';
+            const record = tag as Record<string, unknown>;
+            return preferTranslated
+              ? firstString(record.translatedName, record.name, record.slug)
+              : firstString(record.name, record.translatedName, record.slug);
+          })
+          .filter(Boolean)
+      : [];
+
+    return {
+      title,
+      contentRoot,
+      difficulty: normalize(firstString(question.difficulty), 100),
+      topicTags,
+      paidOnly: question.isPaidOnly === true,
+      contentAvailable: Boolean(content.trim()),
+    };
+  })();
+
   const problemSignalPatterns = [
     /\binputs?\b/,
     /\boutputs?\b/,
@@ -186,7 +285,10 @@ export function extractProblemFromDocument(
       .filter(Boolean);
 
   const titleNode = query(config.titleSelectors)[0];
-  const configuredRoots = query(config.statementSelectors);
+  const configuredRoots =
+    embeddedLeetCode && textOf(embeddedLeetCode.contentRoot, 120_000)
+      ? [embeddedLeetCode.contentRoot]
+      : query(config.statementSelectors);
   let inferredGenericRoot: Element | undefined;
   // Client-rendered problem libraries often use only anonymous divs. Walk
   // outward from the title and stop at the first problem-shaped container.
@@ -258,10 +360,23 @@ export function extractProblemFromDocument(
   const sectionConstraints = sections
     .filter(({ heading }) => /constraint|limit/i.test(heading))
     .flatMap(({ body }) => body.split('\n'));
-  const constraints = unique([...explicitConstraints, ...sectionConstraints]).slice(
-    0,
-    100,
-  );
+  const leetcodeConstraints =
+    config.site === 'leetcode'
+      ? roots.flatMap((root) => {
+          const label = Array.from(root.querySelectorAll('strong, b')).find((node) =>
+            /^constraints?\s*:?$/i.test(textOf(node, 100)),
+          );
+          const list = label?.closest('p')?.nextElementSibling;
+          return list?.matches('ul, ol')
+            ? Array.from(list.querySelectorAll('li')).map((node) => textOf(node, 5_000))
+            : [];
+        })
+      : [];
+  const constraints = unique([
+    ...explicitConstraints,
+    ...sectionConstraints,
+    ...leetcodeConstraints,
+  ]).slice(0, 100);
 
   let sampleInputs = allText(config.sampleInputSelectors);
   let sampleOutputs = allText(config.sampleOutputSelectors);
@@ -286,7 +401,7 @@ export function extractProblemFromDocument(
   }
 
   if (
-    config.site === 'generic' &&
+    (config.site === 'generic' || config.site === 'leetcode') &&
     sampleInputs.length === 0 &&
     sampleOutputs.length === 0
   ) {
@@ -297,27 +412,72 @@ export function extractProblemFromDocument(
 
     const splitLabeledSample = (
       value: string,
-    ): { input: string; output: string } | null => {
-      // Some editors place both halves in one block. Require explicit labels
-      // at line boundaries so ordinary preformatted text is never split.
-      const match = value.match(
-        /(?:^|\n)[ \t]*(?:sample[ \t]+)?input[ \t]*:[ \t]*(?:\n|$)([\s\S]*?)(?:^|\n)[ \t]*(?:sample[ \t]+)?output[ \t]*:[ \t]*(?:\n|$)([\s\S]*)/im,
-      );
-      if (!match) return null;
-      const sampleInput = normalize(match[1] ?? '', 20_000);
-      const sampleOutput = normalize(match[2] ?? '', 20_000);
+    ): { input: string; output: string; explanation?: string } | null => {
+      let sampleInput: string;
+      let sampleOutput: string;
+      let explanation = '';
+
+      if (config.site === 'leetcode') {
+        const inputLabel = /\bInput\s*:\s*/i.exec(value);
+        const afterInput = inputLabel
+          ? value.slice((inputLabel.index ?? 0) + inputLabel[0].length)
+          : '';
+        const outputLabel = /\bOutput\s*:\s*/i.exec(afterInput);
+        if (!inputLabel || !outputLabel) return null;
+        const afterOutput = afterInput.slice(
+          (outputLabel.index ?? 0) + outputLabel[0].length,
+        );
+        const explanationLabel = /\bExplanation\s*:\s*/i.exec(afterOutput);
+        sampleInput = normalize(afterInput.slice(0, outputLabel.index ?? 0), 20_000);
+        sampleOutput = normalize(
+          explanationLabel
+            ? afterOutput.slice(0, explanationLabel.index ?? 0)
+            : afterOutput,
+          20_000,
+        );
+        explanation = explanationLabel
+          ? normalize(
+              afterOutput.slice(
+                (explanationLabel.index ?? 0) + explanationLabel[0].length,
+              ),
+              20_000,
+            )
+          : '';
+      } else {
+        // Generic pages need labels at line boundaries so ordinary
+        // preformatted text is never split accidentally.
+        const match = value.match(
+          /(?:^|\n)[ \t]*(?:sample[ \t]+)?input[ \t]*:[ \t]*(?:\n|$)([\s\S]*?)(?:^|\n)[ \t]*(?:sample[ \t]+)?output[ \t]*:[ \t]*(?:\n|$)([\s\S]*)/im,
+        );
+        if (!match) return null;
+        sampleInput = normalize(match[1] ?? '', 20_000);
+        sampleOutput = normalize(match[2] ?? '', 20_000);
+      }
+
       return sampleInput || sampleOutput
-        ? { input: sampleInput, output: sampleOutput }
+        ? {
+            input: sampleInput,
+            output: sampleOutput,
+            ...(explanation ? { explanation } : {}),
+          }
         : null;
     };
     const labeledSamples = preformatted
       .map(splitLabeledSample)
-      .filter((sample): sample is { input: string; output: string } => sample !== null);
+      .filter(
+        (sample): sample is { input: string; output: string; explanation?: string } =>
+          sample !== null,
+      );
 
     if (labeledSamples.length > 0) {
       sampleInputs = labeledSamples.map((sample) => sample.input);
       sampleOutputs = labeledSamples.map((sample) => sample.output);
-    } else if (preformatted.length >= 2 && preformatted.length % 2 === 0) {
+      explanations = labeledSamples.map((sample) => sample.explanation ?? '');
+    } else if (
+      config.site === 'generic' &&
+      preformatted.length >= 2 &&
+      preformatted.length % 2 === 0
+    ) {
       sampleInputs = preformatted.filter((_, index) => index % 2 === 0);
       sampleOutputs = preformatted.filter((_, index) => index % 2 === 1);
     }
@@ -336,12 +496,17 @@ export function extractProblemFromDocument(
   );
 
   const title =
+    embeddedLeetCode?.title ||
     textOf(titleNode, 500) ||
     normalize(document.title.replace(/\s*[-|].*$/, ''), 500) ||
     'Untitled problem';
 
-  const rawTags = unique(query(config.tagSelectors).map((node) => textOf(node, 100)));
-  const explicitRating = firstText(config.ratingSelectors, 100);
+  const rawTags = unique([
+    ...(embeddedLeetCode?.topicTags ?? []),
+    ...query(config.tagSelectors).map((node) => textOf(node, 100)),
+  ]);
+  const explicitRating =
+    embeddedLeetCode?.difficulty || firstText(config.ratingSelectors, 100);
   const ratingTag = rawTags.find((tag) => /^\*\d+$/.test(tag));
   const rating = explicitRating || ratingTag;
   const timeLimit = firstText(config.timeLimitSelectors, 200);
@@ -364,10 +529,21 @@ export function extractProblemFromDocument(
     if (wordCount < 40) confidence -= 0.2;
     if (usedBodyFallback) confidence -= 0.12;
   }
+  const leetcodeUnavailable =
+    config.site === 'leetcode' &&
+    (usedBodyFallback ||
+      (embeddedLeetCode?.paidOnly === true && !embeddedLeetCode.contentAvailable) ||
+      /subscribe to unlock|premium subscription|content unavailable/i.test(statement));
+  if (leetcodeUnavailable) confidence = Math.min(confidence, 0.45);
 
   const warnings: string[] = [];
   if (wordCount < 80) warnings.push('The extracted statement is unusually short.');
-  if (!input && !output && config.site !== 'advent-of-code') {
+  if (
+    !input &&
+    !output &&
+    config.site !== 'advent-of-code' &&
+    config.site !== 'leetcode'
+  ) {
     warnings.push('Input and output sections were not identified separately.');
   }
   if (config.site === 'generic') {
@@ -375,6 +551,13 @@ export function extractProblemFromDocument(
     if (usedBodyFallback) {
       warnings.push('The generic extractor could not isolate a problem container.');
     }
+  }
+  if (config.site === 'leetcode' && leetcodeUnavailable) {
+    warnings.push(
+      embeddedLeetCode?.paidOnly
+        ? 'This LeetCode statement appears to require an account or Premium access.'
+        : 'The LeetCode description was not ready. Wait for the page to load and use Read again.',
+    );
   }
 
   return {

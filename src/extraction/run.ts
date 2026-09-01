@@ -5,6 +5,7 @@ import { ProblemContextSchema, type ProblemContext } from './schema';
 
 const PAGE_ACCESS_ERROR =
   'Page access was not granted. Click the extension icon on this tab and try again.';
+const LEETCODE_RETRY_DELAYS_MS = [0, 500, 1_000] as const;
 
 export interface ActiveProblemResult {
   context: ProblemContext;
@@ -29,23 +30,38 @@ export async function extractActiveProblem(): Promise<ActiveProblemResult> {
   }
 
   const config = adapterForUrl(tab.url);
-  let results;
-  try {
-    results = await browser.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: extractProblemFromDocument,
-      args: [config],
-    });
-  } catch {
-    throw new Error(PAGE_ACCESS_ERROR);
+  const delays = config.site === 'leetcode' ? LEETCODE_RETRY_DELAYS_MS : [0];
+  let bestContext: ProblemContext | null = null;
+  for (const delay of delays) {
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+    let results;
+    try {
+      results = await browser.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: extractProblemFromDocument,
+        args: [config],
+      });
+    } catch {
+      throw new Error(PAGE_ACCESS_ERROR);
+    }
+
+    const parsed = ProblemContextSchema.safeParse(results[0]?.result);
+    if (!parsed.success) continue;
+    if (
+      !bestContext ||
+      parsed.data.confidence > bestContext.confidence ||
+      parsed.data.statement.length > bestContext.statement.length
+    ) {
+      bestContext = parsed.data;
+    }
+    if (isLikelyProblem(parsed.data)) break;
   }
 
-  const parsed = ProblemContextSchema.safeParse(results[0]?.result);
-  if (!parsed.success) {
+  if (!bestContext) {
     throw new Error('The page did not yield a valid problem statement.');
   }
   return {
-    context: parsed.data,
-    likelyProblem: isLikelyProblem(parsed.data),
+    context: bestContext,
+    likelyProblem: isLikelyProblem(bestContext),
   };
 }

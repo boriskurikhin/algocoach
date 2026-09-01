@@ -35,6 +35,40 @@ describe('active-tab extraction boundary', () => {
     );
   });
 
+  it('retries while a LeetCode SPA description is still loading', async () => {
+    const source = {
+      url: 'https://leetcode.com/problems/two-sum/',
+      host: 'leetcode.com',
+      site: 'leetcode' as const,
+      extractedAt: 1,
+    };
+    const loading = {
+      ...problemFixture,
+      source,
+      statement: 'Loading problem description…',
+      confidence: 0.4,
+    };
+    const loaded = { ...problemFixture, source, title: 'Two Sum', confidence: 0.95 };
+    mocks.query.mockResolvedValue([{ id: 2, url: source.url }]);
+    mocks.executeScript
+      .mockResolvedValueOnce([{ result: loading }])
+      .mockResolvedValueOnce([{ result: loaded }]);
+
+    vi.useFakeTimers();
+    try {
+      const result = extractActiveProblem();
+      await vi.advanceTimersByTimeAsync(500);
+
+      await expect(result).resolves.toMatchObject({
+        likelyProblem: true,
+        context: { title: 'Two Sum' },
+      });
+      expect(mocks.executeScript).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects missing, privileged, denied, and malformed pages safely', async () => {
     mocks.query.mockResolvedValueOnce([]);
     await expect(extractActiveProblem()).rejects.toThrow(/No active webpage/);
