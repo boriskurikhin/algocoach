@@ -5,15 +5,16 @@ import type { ExtensionSettings } from '../storage/local';
 import { DrawConceptSchema, type DrawConcept } from '../visualization/schema';
 import { requestModelResponse } from './openai-client';
 import type { CoachingSession } from './schemas';
+import type { SessionUsage } from './usage';
 
 const drawConceptTool = zodResponsesFunction({
   name: 'draw_concept',
   description:
-    'Draw one minimal, prediction-oriented concept at the current hint stage. Never show the full solution.',
+    'Draw one compact teaching figure when a tiny state, range, or path makes the current idea easier to see. Reuse one stable scaffold, change one thing per frame, use emphasis sparingly, and end with a prediction. Never show the full solution.',
   parameters: DrawConceptSchema,
 });
 
-export interface CoachCandidate {
+interface CoachCandidate {
   reply: string;
   visualization?: DrawConcept;
 }
@@ -24,6 +25,7 @@ export async function draftCoachResponse(
   settings: ExtensionSettings,
   onActivity?: () => void,
   signal?: AbortSignal,
+  onUsage?: (usage: SessionUsage) => void,
 ): Promise<CoachCandidate> {
   const response = await requestModelResponse(
     settings,
@@ -37,7 +39,11 @@ export async function draftCoachResponse(
       text: { verbosity: 'low' },
       max_output_tokens: 12_000,
     },
-    { signal },
+    {
+      signal,
+      onUsage,
+      promptCacheKey: `socratic-coach:coach:${session.id}`,
+    },
   );
 
   let visualization: DrawConcept | undefined;

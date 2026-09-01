@@ -30,7 +30,15 @@ export async function stubOpenAI(
 ) {
   const actual = await importOriginal();
   class StubbedOpenAI extends actual.default {
-    override responses = { parse: mocks.parse } as never;
+    override responses = {
+      stream: (body: unknown, options: unknown) => {
+        const responseStream = {
+          on: () => responseStream,
+          finalResponse: () => mocks.parse(body, options),
+        };
+        return responseStream;
+      },
+    } as never;
   }
   return { ...actual, default: StubbedOpenAI };
 }

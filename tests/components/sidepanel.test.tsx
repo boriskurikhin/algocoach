@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  learnerSnapshotFixture,
   problemFixture,
+  restorableSessionFixture,
   sceneFixture,
   sessionFixture,
+  sessionReadyFixture,
 } from '../fixtures/domain';
 import { publicSettingsFixture } from '../fixtures/openai';
 
@@ -63,6 +64,32 @@ function disconnectPort() {
   for (const listener of [...mocks.disconnectListeners]) listener();
 }
 
+async function runtimeResponse(request: { type: string }) {
+  if (request.type === 'settings:get') {
+    return { ok: true, data: { ...publicSettingsFixture, hasApiKey: true } };
+  }
+  if (request.type === 'problem:extract') {
+    return {
+      ok: true,
+      data: { context: problemFixture, likelyProblem: true },
+    };
+  }
+  if (request.type === 'session:get-active') {
+    return { ok: true, data: { session: null } };
+  }
+  if (request.type === 'session:clear-active') {
+    return { ok: true, data: {} };
+  }
+  return { ok: false, error: 'Unexpected request.' };
+}
+
+async function runtimeResponseWithSession(request: { type: string }) {
+  if (request.type === 'session:get-active') {
+    return { ok: true, data: { session: restorableSessionFixture } };
+  }
+  return runtimeResponse(request);
+}
+
 describe('side panel coaching flow', () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -74,24 +101,7 @@ describe('side panel coaching flow', () => {
     mocks.disconnectListeners.clear();
     mocks.contains.mockResolvedValue(true);
     mocks.request.mockResolvedValue(true);
-    mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
-      if (request.type === 'settings:get') {
-        return { ok: true, data: { ...publicSettingsFixture, hasApiKey: true } };
-      }
-      if (request.type === 'problem:extract') {
-        return {
-          ok: true,
-          data: { context: problemFixture, likelyProblem: true },
-        };
-      }
-      if (request.type === 'session:get-active') {
-        return { ok: true, data: { session: null } };
-      }
-      if (request.type === 'session:clear-active') {
-        return { ok: true, data: {} };
-      }
-      return { ok: false, error: 'Unexpected request.' };
-    });
+    mocks.sendMessage.mockImplementation(runtimeResponse);
   });
 
   it('moves from local extraction through a guarded response', async () => {
@@ -106,10 +116,7 @@ describe('side panel coaching flow', () => {
 
     act(() => {
       emit({
-        type: 'session:ready',
-        sessionId: 'session-1',
-        problem: problemFixture,
-        stage: 'listen',
+        ...sessionReadyFixture,
         messages: [
           {
             id: 'opening',
@@ -118,10 +125,10 @@ describe('side panel coaching flow', () => {
             createdAt: 1,
           },
         ],
-        learnerSnapshot: learnerSnapshotFixture,
       });
     });
     expect(screen.getByText('What are you thinking so far?')).toBeInTheDocument();
+    expect(screen.getByText(/1\.5K tokens · ≈\$0\.013/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('What are you thinking?'), {
       target: { value: 'I think rounding is involved, but I lose extra units.' },
@@ -148,6 +155,7 @@ describe('side panel coaching flow', () => {
         type: 'coach:reply',
         sessionId: 'session-1',
         stage: 'clarify',
+        usage: sessionFixture.usage,
         message: {
           id: 'reply',
           role: 'assistant',
@@ -169,28 +177,7 @@ describe('side panel coaching flow', () => {
   });
 
   it('restores the active conversation when the panel is reopened', async () => {
-    mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
-      if (request.type === 'settings:get') {
-        return { ok: true, data: { ...publicSettingsFixture, hasApiKey: true } };
-      }
-      if (request.type === 'session:get-active') {
-        return {
-          ok: true,
-          data: {
-            session: {
-              sessionId: sessionFixture.id,
-              problem: sessionFixture.problem,
-              stage: sessionFixture.stage,
-              messages: sessionFixture.messages,
-            },
-          },
-        };
-      }
-      if (request.type === 'session:clear-active') {
-        return { ok: true, data: {} };
-      }
-      return { ok: false, error: 'Unexpected request.' };
-    });
+    mocks.sendMessage.mockImplementation(runtimeResponseWithSession);
 
     render(<App />);
 
@@ -210,6 +197,27 @@ describe('side panel coaching flow', () => {
         sessionId: sessionFixture.id,
       });
     });
+    expect(screen.getByRole('button', { name: 'Start coaching' })).toBeInTheDocument();
+  });
+
+  it('keeps the conversation open when changing problems cannot be saved', async () => {
+    mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
+      if (request.type === 'session:clear-active') {
+        return { ok: false, error: 'Session storage is unavailable.' };
+      }
+      return runtimeResponseWithSession(request);
+    });
+
+    render(<App />);
+    expect(
+      await screen.findByText('I think I need to round up each batch.'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Change problem' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Session storage is unavailable.',
+    );
+    expect(screen.getByText('Hint stage: listen')).toBeInTheDocument();
   });
 
   it('reconnects before the next coaching message after an idle disconnect', async () => {
@@ -217,14 +225,7 @@ describe('side panel coaching flow', () => {
     expect(await screen.findByText('Batch Sums')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Start coaching' }));
     act(() => {
-      emit({
-        type: 'session:ready',
-        sessionId: sessionFixture.id,
-        problem: sessionFixture.problem,
-        stage: sessionFixture.stage,
-        messages: sessionFixture.messages,
-        learnerSnapshot: learnerSnapshotFixture,
-      });
+      emit(sessionReadyFixture);
     });
 
     act(disconnectPort);
@@ -249,7 +250,7 @@ describe('side panel coaching flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start coaching' }));
     expect(
       screen.getByText(
-        /Building a private coaching map with OpenAI.*Fast.*high reasoning.*90s limit/,
+        /Building a private coaching map with OpenAI.*Standard.*high reasoning.*90s limit/,
       ),
     ).toBeInTheDocument();
 
@@ -306,10 +307,10 @@ describe('side panel coaching flow', () => {
 
   it('routes a denied page to Chrome’s own site-access control', async () => {
     mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
-      if (request.type === 'settings:get') {
-        return { ok: true, data: { ...publicSettingsFixture, hasApiKey: true } };
+      if (request.type === 'problem:extract') {
+        return { ok: false, error: 'Page access was not granted. Click the icon.' };
       }
-      return { ok: false, error: 'Page access was not granted. Click the icon.' };
+      return runtimeResponse(request);
     });
     render(<App />);
 

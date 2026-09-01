@@ -1,6 +1,8 @@
 import type { CoachingMap, CoachingSession } from '../../src/agent/schemas';
+import type { SessionUsage } from '../../src/agent/usage';
 import type { ProblemContext } from '../../src/extraction/schema';
 import type { LearnerSnapshot } from '../../src/learner/schema';
+import type { RestorableSession } from '../../src/messaging/schema';
 import type { DrawConcept } from '../../src/visualization/schema';
 
 export const problemFixture: ProblemContext = {
@@ -70,6 +72,16 @@ export const coachingMapFixture: CoachingMap = {
   visualizationOpportunities: ['Show one fixed-size batch and its unused units.'],
 };
 
+export const sessionUsageFixture: SessionUsage = {
+  modelCalls: 1,
+  inputTokens: 1_000,
+  cachedInputTokens: 200,
+  cacheWriteTokens: 100,
+  outputTokens: 500,
+  reasoningTokens: 350,
+  estimatedCostUsd: 0.01338,
+};
+
 export const sessionFixture: CoachingSession = {
   version: 1,
   id: 'session-1',
@@ -91,8 +103,22 @@ export const sessionFixture: CoachingSession = {
       createdAt: 2,
     },
   ],
+  usage: sessionUsageFixture,
   createdAt: 1,
   updatedAt: 2,
+};
+
+export const restorableSessionFixture: RestorableSession = {
+  sessionId: sessionFixture.id,
+  problem: sessionFixture.problem,
+  stage: sessionFixture.stage,
+  messages: sessionFixture.messages,
+  usage: sessionFixture.usage,
+};
+
+export const sessionReadyFixture = {
+  type: 'session:ready' as const,
+  ...restorableSessionFixture,
 };
 
 export const sceneFixture: DrawConcept = {
@@ -107,8 +133,11 @@ export const sceneFixture: DrawConcept = {
           type: 'array',
           id: 'batch',
           label: 'Produced units',
+          indexStart: 1,
           values: ['1', '2', '3', '4', '5', '6'],
           highlighted: [],
+          secondaryHighlighted: null,
+          ranges: [{ start: 1, end: 6, label: 'one batch', state: 'normal' }],
           pointers: [],
         },
       ],
@@ -121,9 +150,12 @@ export const sceneFixture: DrawConcept = {
           type: 'array',
           id: 'batch',
           label: 'Produced units',
+          indexStart: 1,
           values: ['1', '2', '3', '4', '5', '6'],
-          highlighted: [5],
-          pointers: [{ index: 5, label: 'left' }],
+          highlighted: [6],
+          secondaryHighlighted: [1, 2, 3, 4, 5],
+          ranges: [{ start: 1, end: 5, label: '5 used', state: 'secondary' }],
+          pointers: [{ index: 6, label: 'left' }],
         },
       ],
     },

@@ -22,6 +22,13 @@ Every hint-ladder entry must remain less revealing than the solution itself.
 Begin with statement/model checks and tiny examples. Later entries may name a
 boundary or connect knowledge already demonstrated by the learner, but must
 not contain complete pseudocode.
+
+Build the ladder in discovery order: concrete state, one changed quantity,
+visible trade-off or contradiction, invariant, then connection. Record visual
+opportunities only when a tiny before/after state, contiguous range, or path
+could make one of those transitions visible. Each opportunity should identify
+what stays fixed, the one thing to emphasize, and a prediction the learner can
+make. Never encode the full algorithm in the visual plan.
 `.trim();
 
 export function buildProblemAnalysisInput(

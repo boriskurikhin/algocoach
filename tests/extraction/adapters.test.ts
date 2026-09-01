@@ -15,6 +15,7 @@ import {
   adventOfCodeHtml,
   codeforcesHtml,
   csesProblemHtml,
+  divOnlyProblemHtml,
   dmojHtml,
   genericProblemHtml,
   nonProblemHtml,
@@ -166,6 +167,30 @@ describe('problem adapters', () => {
       input: expect.stringContaining('1 2 3'),
       output: expect.stringContaining('6'),
     });
+    expect(isLikelyProblem(context)).toBe(true);
+  });
+
+  it('isolates a div-only problem and parses lower-level labeled sections', () => {
+    load(divOnlyProblemHtml);
+    const context = ProblemContextSchema.parse(
+      extractProblemFromDocument(genericAdapter),
+    );
+
+    expect(context.title).toBe('Credit Timeline');
+    expect(context.statement).not.toContain('RELATED MATERIAL');
+    expect(context.statement).not.toContain('EXPERT DIRECTORY');
+    expect(context.input).toContain('number of operations');
+    expect(context.output).toContain('Print the balance');
+    expect(context.constraints).toEqual(
+      expect.arrayContaining(['1 ≤ operations ≤ 100000', '0 ≤ timestamp ≤ 1000000000']),
+    );
+    expect(context.samples[0]).toEqual({
+      input: '4\ngrant a 3 10 60\nbalance 10\nbalance 60',
+      output: '3\n0',
+    });
+    expect(context.warnings).not.toContain(
+      'The generic extractor could not isolate a problem container.',
+    );
     expect(isLikelyProblem(context)).toBe(true);
   });
 

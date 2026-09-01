@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildProblemAnalysisInput } from '../../src/prompts/analyze';
+import {
+  PROBLEM_ANALYST_SYSTEM_PROMPT,
+  buildProblemAnalysisInput,
+} from '../../src/prompts/analyze';
 import { SOCRATIC_COACH_SYSTEM_PROMPT, buildCoachInput } from '../../src/prompts/coach';
 import { RESPONSE_GUARD_SYSTEM_PROMPT, buildGuardInput } from '../../src/prompts/guard';
+import { MAX_TEACHING_SNIPPET_LINES } from '../../src/prompts/policy';
 import {
   coachingMapFixture,
   learnerSnapshotFixture,
@@ -17,7 +21,13 @@ describe('coaching contract prompts', () => {
     ['frustration', 'Acknowledge frustration briefly'],
     ['learner uncertainty', 'Learner-profile claims are uncertain'],
     ['DOM and message injection', 'untrusted'],
-    ['visualization leakage', 'not animate the full solution'],
+    ['visualization leakage', 'Do not animate the full'],
+    ['calm technical voice', 'clear technical explainer'],
+    ['concrete-first explanation', 'Begin with the problem'],
+    ['discovery order', 'Build ideas in discovery order'],
+    ['trade-off before technique', 'benefit and cost'],
+    ['stable visual frames', 'primitive ids'],
+    ['one visual change at a time', 'change or emphasize one'],
   ])('contains a rule for %s', (_scenario, requiredText) => {
     expect(SOCRATIC_COACH_SYSTEM_PROMPT).toContain(requiredText);
   });
@@ -27,7 +37,10 @@ describe('coaching contract prompts', () => {
     expect(input).toContain('PRIVATE_COACHING_MAP_START');
     expect(input).toContain('UNTRUSTED_CONVERSATION_START');
     expect(input).toContain('CURRENT_HINT_STAGE: listen');
-    expect(SOCRATIC_COACH_SYSTEM_PROMPT).toContain('at most eight lines');
+    expect(MAX_TEACHING_SNIPPET_LINES).toBe(8);
+    expect(SOCRATIC_COACH_SYSTEM_PROMPT).toContain(
+      `${MAX_TEACHING_SNIPPET_LINES} lines`,
+    );
   });
 
   it('does not resend structured copies already present in the statement', () => {
@@ -101,7 +114,13 @@ describe('coaching contract prompts', () => {
     expect(input).toContain('PRIVATE_ANSWER_BOUNDARY_START');
     expect(input).toContain('UNTRUSTED_LATEST_LEARNER_MESSAGE_START');
     expect(RESPONSE_GUARD_SYSTEM_PROMPT).toContain('at most one rung');
-    expect(RESPONSE_GUARD_SYSTEM_PROMPT).toContain('at most eight lines');
+    expect(RESPONSE_GUARD_SYSTEM_PROMPT).toContain(
+      `${MAX_TEACHING_SNIPPET_LINES} lines`,
+    );
     expect(RESPONSE_GUARD_SYSTEM_PROMPT).toContain('Do not infer personality');
+    expect(RESPONSE_GUARD_SYSTEM_PROMPT).toContain(
+      'preserve the same scaffold and layout',
+    );
+    expect(PROBLEM_ANALYST_SYSTEM_PROMPT).toContain('what stays fixed');
   });
 });

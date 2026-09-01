@@ -24,23 +24,21 @@ const ProfileEvidenceSchema = z.object({
   supports: z.boolean(),
 });
 
-const KnowledgeEstimateSchema = z.object({
-  level: KnowledgeLevelSchema,
+const EstimateSchema = z.object({
   confidence: z.number().min(0).max(1),
   sampleCount: z.number().int().nonnegative(),
-  demonstratedCount: z.number().int().nonnegative(),
   lastObservedAt: z.number().int().nonnegative(),
   pinned: z.boolean().default(false),
   evidence: z.array(ProfileEvidenceSchema).max(MAX_EVIDENCE),
 });
 
-const TendencyEstimateSchema = z.object({
+const KnowledgeEstimateSchema = EstimateSchema.extend({
+  level: KnowledgeLevelSchema,
+  demonstratedCount: z.number().int().nonnegative(),
+});
+
+const TendencyEstimateSchema = EstimateSchema.extend({
   score: z.number().min(-1).max(1),
-  confidence: z.number().min(0).max(1),
-  sampleCount: z.number().int().nonnegative(),
-  lastObservedAt: z.number().int().nonnegative(),
-  pinned: z.boolean().default(false),
-  evidence: z.array(ProfileEvidenceSchema).max(MAX_EVIDENCE),
 });
 
 export const LearnerProfileSchema = z.object({

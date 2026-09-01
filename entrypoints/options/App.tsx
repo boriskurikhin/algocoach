@@ -7,6 +7,7 @@ import {
   type LearnerProfile,
   type TendencyEstimate,
 } from '../../src/learner/schema';
+import { COACH_PROCESSING_LABEL } from '../../src/agent/schemas';
 import { errorMessage, sendExtensionRequest } from '../../src/messaging/client';
 import type { PublicSettings, RuntimeRequest } from '../../src/messaging/schema';
 import type { ExtensionSettings } from '../../src/storage/local';
@@ -323,7 +324,10 @@ export default function App() {
             }
           />
         </label>
-        <p className="quiet">Model: GPT-5.6 Sol · Processing: Fast (2× token price)</p>
+        <p className="quiet">
+          Model: GPT-5.6 Sol · Processing: {COACH_PROCESSING_LABEL} (half the price of
+          Fast)
+        </p>
         <div className="split-fields">
           <label>
             Reasoning mode

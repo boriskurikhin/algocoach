@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { EMPTY_SESSION_USAGE } from '../../src/agent/usage';
 import { sessionFixture } from '../fixtures/domain';
 
 const mocks = vi.hoisted(() => {
@@ -65,5 +66,19 @@ describe('ephemeral coaching-session storage', () => {
     mocks.values.delete('socratic-coach:active-session');
 
     expect(await getActiveSession()).toMatchObject({ id: 'newer' });
+  });
+
+  it('backfills usage for sessions saved before accounting was added', async () => {
+    const legacy = Object.fromEntries(
+      Object.entries(sessionFixture).filter(([key]) => key !== 'usage'),
+    );
+    mocks.values.set('socratic-coach:sessions', {
+      [sessionFixture.id]: legacy,
+    });
+    mocks.values.set('socratic-coach:active-session', sessionFixture.id);
+
+    expect(await getActiveSession()).toMatchObject({
+      usage: EMPTY_SESSION_USAGE,
+    });
   });
 });

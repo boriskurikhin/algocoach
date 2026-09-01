@@ -35,7 +35,8 @@ describe('private problem analysis', () => {
     const request = mocks.parse.mock.calls[0]?.[0];
     expect(request.model).toBe('gpt-5.6-sol');
     expect(request.store).toBe(false);
-    expect(request.service_tier).toBe('fast');
+    expect(request.service_tier).toBe('default');
+    expect(request).not.toHaveProperty('prompt_cache_key');
     expect(request.reasoning).toEqual({ effort: 'high', mode: 'standard' });
     expect(request.text.verbosity).toBe('low');
     expect(request.max_output_tokens).toBe(12_000);
@@ -63,6 +64,39 @@ describe('private problem analysis', () => {
     );
 
     expect(mocks.parse.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+  });
+
+  it('reports final token usage to the session accumulator', async () => {
+    const onUsage = vi.fn();
+    mocks.parse.mockResolvedValueOnce({
+      output_parsed: coachingMapFixture,
+      usage: {
+        input_tokens: 100,
+        input_tokens_details: { cached_tokens: 20, cache_write_tokens: 0 },
+        output_tokens: 50,
+        output_tokens_details: { reasoning_tokens: 30 },
+        total_tokens: 150,
+      },
+    });
+
+    await analyzeProblem(
+      problemFixture,
+      learnerSnapshotFixture,
+      settings,
+      undefined,
+      undefined,
+      onUsage,
+    );
+
+    expect(onUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelCalls: 1,
+        inputTokens: 100,
+        cachedInputTokens: 20,
+        outputTokens: 50,
+        reasoningTokens: 30,
+      }),
+    );
   });
 
   it('explains when reasoning consumes the output budget', async () => {

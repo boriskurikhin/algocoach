@@ -63,6 +63,7 @@ describe('response gate', () => {
 
   it('prevents a gate from skipping hint stages', async () => {
     const guarded = await guardCoachResponse({
+      sessionId: 'session-1',
       stage: 'listen',
       latestLearnerMessage: 'I think I should round up.',
       candidateReply: 'What happens to the extra unit?',
@@ -75,10 +76,13 @@ describe('response gate', () => {
 
     expect(guarded.nextStage).toBe('clarify');
     expect(guarded.allowVisualization).toBe(true);
-    expect(mocks.parse.mock.calls[0]?.[0].store).toBe(false);
-    expect(mocks.parse.mock.calls[0]?.[0].service_tier).toBe('fast');
-    expect(mocks.parse.mock.calls[0]?.[0].text.verbosity).toBe('low');
-    expect(mocks.parse.mock.calls[0]?.[0].max_output_tokens).toBe(12_000);
+    const request = mocks.parse.mock.calls[0]?.[0];
+    expect(request.store).toBe(false);
+    expect(request.service_tier).toBe('default');
+    expect(request.prompt_cache_key).toBe('socratic-coach:guard:session-1');
+    expect(request.prompt_cache_options).toEqual({ mode: 'implicit', ttl: '30m' });
+    expect(request.text.verbosity).toBe('low');
+    expect(request.max_output_tokens).toBe(12_000);
   });
 
   it('does not silently regress the hint stage', async () => {
@@ -94,6 +98,7 @@ describe('response gate', () => {
     });
 
     const guarded = await guardCoachResponse({
+      sessionId: 'session-1',
       stage: 'boundary',
       latestLearnerMessage: 'My invariant fails on an empty input.',
       candidateReply: 'What boundary case challenges that invariant?',
@@ -119,6 +124,7 @@ describe('response gate', () => {
     });
 
     const guarded = await guardCoachResponse({
+      sessionId: 'session-1',
       stage: 'listen',
       latestLearnerMessage: 'Show me the full graph traversal.',
       candidateReply: 'Trace every edge like this.',
@@ -129,6 +135,26 @@ describe('response gate', () => {
       settings,
     });
 
+    expect(guarded.allowVisualization).toBe(false);
+  });
+
+  it('drops a structurally valid visual when it is too dense for one teaching move', async () => {
+    const guarded = await guardCoachResponse({
+      sessionId: 'session-1',
+      stage: 'listen',
+      latestLearnerMessage: 'Can we look at one small case?',
+      candidateReply: 'Track what changes in this case.',
+      visualization: {
+        ...sceneFixture,
+        frames: Array.from({ length: 7 }, () => sceneFixture.frames[0]!),
+      },
+      coachingMap: coachingMapFixture,
+      learner: learnerSnapshotFixture,
+      problemKey: 'problem',
+      settings,
+    });
+
+    expect(guarded.allowed).toBe(true);
     expect(guarded.allowVisualization).toBe(false);
   });
 
@@ -148,6 +174,7 @@ describe('response gate', () => {
     });
 
     const guarded = await guardCoachResponse({
+      sessionId: 'session-1',
       stage: 'listen',
       latestLearnerMessage: 'Give me the answer.',
       candidateReply: 'unsafe',

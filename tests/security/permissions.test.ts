@@ -10,9 +10,9 @@ import {
   extensionPermissions,
 } from '../../wxt.config';
 import {
-  learnerSnapshotFixture,
-  problemFixture,
+  restorableSessionFixture,
   sessionFixture,
+  sessionReadyFixture,
 } from '../fixtures/domain';
 
 describe('extension trust boundaries', () => {
@@ -53,27 +53,23 @@ describe('extension trust boundaries', () => {
 
   it('strips the private coaching map from side-panel session events', () => {
     const event = CoachServerEventSchema.parse({
-      type: 'session:ready',
-      sessionId: 'session',
-      problem: problemFixture,
-      stage: 'listen',
+      ...sessionReadyFixture,
       messages: [],
-      learnerSnapshot: learnerSnapshotFixture,
       coachingMap: { canonicalFamily: 'must remain private' },
     });
     expect(event).not.toHaveProperty('coachingMap');
+    if (event.type !== 'session:ready') throw new Error('Expected session event.');
+    expect(event.usage).toEqual(sessionFixture.usage);
   });
 
   it('strips the private coaching map from restored conversations', () => {
     const result = ActiveSessionResultSchema.parse({
       session: {
-        sessionId: sessionFixture.id,
-        problem: sessionFixture.problem,
-        stage: sessionFixture.stage,
-        messages: sessionFixture.messages,
+        ...restorableSessionFixture,
         coachingMap: sessionFixture.coachingMap,
       },
     });
     expect(result.session).not.toHaveProperty('coachingMap');
+    expect(result.session?.usage).toEqual(sessionFixture.usage);
   });
 });

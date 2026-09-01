@@ -3,13 +3,15 @@ import { createOpenAIClient, safeOpenAIError } from '../src/agent/openai-client'
 import { respondToLearner, startCoachingSession } from '../src/agent/orchestrator';
 import type { CoachStatus } from '../src/agent/schemas';
 import { extractActiveProblem } from '../src/extraction/run';
-import { MAX_EVIDENCE, type LearnerProfile } from '../src/learner/schema';
+import { applyKnowledgeCorrection } from '../src/learner/update-profile';
+import type { LearnerProfile } from '../src/learner/schema';
 import {
   ActiveSessionResultSchema,
   CoachClientMessageSchema,
   CoachServerEventSchema,
   RuntimeRequestSchema,
   RuntimeResponseSchema,
+  toRestorableSession,
   type PublicSettings,
   type RuntimeRequest,
   type RuntimeResponse,
@@ -26,7 +28,11 @@ import {
   setPersonalizationEnabled,
   type ExtensionSettings,
 } from '../src/storage/local';
-import { clearActiveSession, getActiveSession } from '../src/storage/session';
+import {
+  clearActiveSession,
+  getActiveSession,
+  getSession,
+} from '../src/storage/session';
 
 function publicSettings(settings: ExtensionSettings): PublicSettings {
   return {
@@ -50,35 +56,16 @@ async function editProfileEntry(
   >,
 ): Promise<{ profile: LearnerProfile }> {
   const profile = await getLearnerProfile();
-  const now = Date.now();
 
   if (request.type === 'profile:remove-entry') {
     delete profile[request.dimension][request.key];
+    profile.updatedAt = Date.now();
   } else {
-    const collection = profile[request.dimension];
-    const key = request.key.trim().toLowerCase();
-    const previous = collection[key];
-    collection[key] = {
-      level: request.level,
-      confidence: 1,
-      sampleCount: Math.max(1, previous?.sampleCount ?? 0),
-      demonstratedCount: previous?.demonstratedCount ?? 0,
-      lastObservedAt: now,
-      pinned: request.pinned,
-      evidence: [
-        ...(previous?.evidence ?? []),
-        {
-          id: `${now}-learner-correction`.slice(0, 100),
-          at: now,
-          type: 'self-reported' as const,
-          note: 'The learner corrected this estimate in Settings.',
-          supports: true,
-        },
-      ].slice(-MAX_EVIDENCE),
+    return {
+      profile: await saveLearnerProfile(applyKnowledgeCorrection(profile, request)),
     };
   }
 
-  profile.updatedAt = now;
   return { profile: await saveLearnerProfile(profile) };
 }
 
@@ -99,14 +86,7 @@ const handlers: {
   'session:get-active': async () => {
     const session = await getActiveSession();
     return ActiveSessionResultSchema.parse({
-      session: session
-        ? {
-            sessionId: session.id,
-            problem: session.problem,
-            stage: session.stage,
-            messages: session.messages,
-          }
-        : null,
+      session: session ? toRestorableSession(session) : null,
     });
   },
   'session:clear-active': async (request) => {
@@ -226,7 +206,7 @@ export default defineBackground(() => {
           const { onStatus, onModelActivity } = createStatusReporter(post);
 
           if (requestMessage.type === 'session:start') {
-            const { session, learnerSnapshot } = await startCoachingSession({
+            const session = await startCoachingSession({
               problem: requestMessage.problem,
               settings,
               onStatus,
@@ -235,11 +215,7 @@ export default defineBackground(() => {
             });
             post({
               type: 'session:ready',
-              sessionId: session.id,
-              problem: session.problem,
-              stage: session.stage,
-              messages: session.messages,
-              learnerSnapshot,
+              ...toRestorableSession(session),
             });
             return;
           }
@@ -262,9 +238,18 @@ export default defineBackground(() => {
             sessionId: session.id,
             message,
             stage: session.stage,
+            usage: session.usage,
           });
         } catch (error) {
-          post({ type: 'coach:error', message: safeOpenAIError(error) });
+          const failedSession =
+            requestMessage.type === 'session:user-message'
+              ? await getSession(requestMessage.sessionId).catch(() => null)
+              : null;
+          post({
+            type: 'coach:error',
+            message: safeOpenAIError(error),
+            ...(failedSession ? { usage: failedSession.usage } : {}),
+          });
         } finally {
           if (activeRequest === request) activeRequest = null;
           busy = false;

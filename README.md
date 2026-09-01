@@ -73,6 +73,11 @@ an independent guard/rewrite. Starting a problem uses an additional private
 analysis response. This improves restraint but increases API cost and latency.
 The user pays OpenAI directly under their own account.
 
+Requests use standard processing instead of the 2×-priced Fast tier; the model,
+reasoning settings, and coaching inputs are unchanged, but responses may arrive
+more slowly. Stable per-session cache keys improve reuse of repeated prompt
+prefixes without removing coaching context.
+
 ## Learner memory
 
 The local profile can estimate:

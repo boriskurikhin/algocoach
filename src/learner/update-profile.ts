@@ -25,6 +25,12 @@ const knowledgeFields = {
   competency: 'competencies',
 } as const;
 
+const correctionDimensions = {
+  languages: 'language',
+  concepts: 'concept',
+  competencies: 'competency',
+} as const;
+
 const rankOf = (level: KnowledgeLevel): number => rankedLevels.indexOf(level);
 
 export function createEmptyLearnerProfile(now = Date.now()): LearnerProfile {
@@ -150,6 +156,47 @@ function updateTendency(
     lastObservedAt: now,
     evidence: appendEvidence(previous.evidence, observation, now, id),
   };
+}
+
+export function applyKnowledgeCorrection(
+  profileInput: LearnerProfile,
+  correction: {
+    dimension: keyof typeof correctionDimensions;
+    key: string;
+    level: KnowledgeLevel;
+    pinned: boolean;
+  },
+  now = Date.now(),
+): LearnerProfile {
+  const profile = structuredClone(LearnerProfileSchema.parse(profileInput));
+  const key = correction.key.trim().toLowerCase();
+  const previous = profile[correction.dimension][key];
+  const observation: ProfileObservation = {
+    dimension: correctionDimensions[correction.dimension],
+    key,
+    evidenceType: 'self-reported',
+    note: 'The learner corrected this estimate in Settings.',
+    supports: true,
+    confidence: 1,
+    knowledgeLevel: correction.level,
+    problemKey: null,
+  };
+  profile[correction.dimension][key] = {
+    level: correction.level,
+    confidence: 1,
+    sampleCount: Math.max(1, previous?.sampleCount ?? 0),
+    demonstratedCount: previous?.demonstratedCount ?? 0,
+    lastObservedAt: now,
+    pinned: correction.pinned,
+    evidence: appendEvidence(
+      previous?.evidence ?? [],
+      observation,
+      now,
+      `${now}-learner-correction`.slice(0, 100),
+    ),
+  };
+  profile.updatedAt = now;
+  return LearnerProfileSchema.parse(profile);
 }
 
 export function applyProfileObservations(

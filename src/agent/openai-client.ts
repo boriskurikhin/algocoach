@@ -6,11 +6,17 @@ import {
 import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import type { ExtensionSettings } from '../storage/local';
-import { COACH_STEP_TIMEOUT_MS } from './schemas';
+import { COACH_PROCESSING_TIER, COACH_STEP_TIMEOUT_MS } from './schemas';
+import { summarizeResponseUsage, type SessionUsage } from './usage';
 
-type ResponseBody = Parameters<OpenAI['responses']['parse']>[0];
+type ResponseBody = Parameters<OpenAI['responses']['stream']>[0];
 
 class CoachRequestError extends Error {}
+
+const REASONING_BUDGET_ERROR =
+  'OpenAI used the entire reasoning budget before finishing. Try the request again.';
+const CONTENT_FILTER_ERROR =
+  'OpenAI’s safety filter stopped this request. Try a shorter problem statement.';
 
 export function createOpenAIClient(settings: ExtensionSettings): OpenAI {
   if (!settings.apiKey) {
@@ -26,8 +32,9 @@ export function createOpenAIClient(settings: ExtensionSettings): OpenAI {
 }
 
 /**
- * Every coaching call shares one model, the learner's reasoning settings, and
- * no retention at OpenAI. Those are applied last so a caller cannot opt out.
+ * Every coaching call shares one model, the learner's reasoning settings,
+ * standard processing, and no response storage. Those are applied last so a
+ * caller cannot opt out.
  */
 export async function requestModelResponse<Body extends ResponseBody>(
   settings: ExtensionSettings,
@@ -36,10 +43,12 @@ export async function requestModelResponse<Body extends ResponseBody>(
   options: {
     signal?: AbortSignal | undefined;
     reasoningMode?: ExtensionSettings['reasoningMode'] | undefined;
+    onUsage?: ((usage: SessionUsage) => void) | undefined;
+    promptCacheKey?: string | undefined;
   } = {},
 ) {
   onActivity?.();
-  const response = await createOpenAIClient(settings).responses.parse(
+  const stream = createOpenAIClient(settings).responses.stream(
     {
       ...body,
       model: settings.model,
@@ -47,12 +56,21 @@ export async function requestModelResponse<Body extends ResponseBody>(
         effort: settings.reasoningEffort,
         mode: options.reasoningMode ?? settings.reasoningMode,
       },
-      service_tier: 'fast',
+      service_tier: COACH_PROCESSING_TIER,
+      ...(options.promptCacheKey
+        ? {
+            prompt_cache_key: options.promptCacheKey,
+            prompt_cache_options: { mode: 'implicit' as const, ttl: '30m' as const },
+          }
+        : {}),
       store: false,
     },
     { signal: options.signal },
   );
+  stream.on('event', () => onActivity?.());
+  const response = await stream.finalResponse();
   onActivity?.();
+  if (response.usage) options.onUsage?.(summarizeResponseUsage(response.usage));
 
   if (response.status === 'failed') {
     throw new CoachRequestError(
@@ -62,8 +80,8 @@ export async function requestModelResponse<Body extends ResponseBody>(
   if (response.status === 'incomplete') {
     const message =
       response.incomplete_details?.reason === 'content_filter'
-        ? 'OpenAI’s safety filter stopped this step. Try a shorter problem statement.'
-        : 'OpenAI used the entire reasoning budget before finishing. Try the request again.';
+        ? CONTENT_FILTER_ERROR
+        : REASONING_BUDGET_ERROR;
     throw new CoachRequestError(message);
   }
   return response;
@@ -80,6 +98,8 @@ export async function requestStructuredResponse<Schema extends z.ZodType>(input:
   invalidResultMessage: string;
   signal?: AbortSignal | undefined;
   reasoningMode?: ExtensionSettings['reasoningMode'] | undefined;
+  onUsage?: ((usage: SessionUsage) => void) | undefined;
+  promptCacheKey?: string | undefined;
 }): Promise<z.infer<Schema>> {
   const response = await requestModelResponse(
     input.settings,
@@ -93,7 +113,12 @@ export async function requestStructuredResponse<Schema extends z.ZodType>(input:
       },
       max_output_tokens: input.maxOutputTokens,
     },
-    { signal: input.signal, reasoningMode: input.reasoningMode },
+    {
+      signal: input.signal,
+      reasoningMode: input.reasoningMode,
+      onUsage: input.onUsage,
+      promptCacheKey: input.promptCacheKey,
+    },
   );
 
   if (!response.output_parsed) throw new CoachRequestError(input.invalidResultMessage);
@@ -106,7 +131,7 @@ export function safeOpenAIError(error: unknown): string {
     return 'OpenAI rejected this API key. Check it in Settings.';
   }
   if (error instanceof OpenAI.APIConnectionTimeoutError) {
-    return 'OpenAI took too long to respond. Try the request again.';
+    return 'The connection to OpenAI closed before the response finished. Try again.';
   }
   if (error instanceof OpenAI.RateLimitError) {
     return 'OpenAI rate-limited the request. Wait briefly and try again.';
@@ -127,10 +152,10 @@ export function safeOpenAIError(error: unknown): string {
     return 'The extension could not reach OpenAI.';
   }
   if (error instanceof LengthFinishReasonError) {
-    return 'OpenAI used the entire reasoning budget before finishing. Try the request again.';
+    return REASONING_BUDGET_ERROR;
   }
   if (error instanceof ContentFilterFinishReasonError) {
-    return 'OpenAI’s safety filter stopped this request. Try a shorter problem statement.';
+    return CONTENT_FILTER_ERROR;
   }
   if (error instanceof OpenAI.APIError) {
     return error.status && error.status >= 500

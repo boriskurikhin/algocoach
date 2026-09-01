@@ -3,9 +3,11 @@ import {
   ChatMessageSchema,
   CoachStageSchema,
   CoachStatusSchema,
+  type CoachingSession,
 } from '../agent/schemas';
+import { EMPTY_SESSION_USAGE, SessionUsageSchema } from '../agent/usage';
 import { ProblemContextSchema } from '../extraction/schema';
-import { KnowledgeLevelSchema, LearnerSnapshotSchema } from '../learner/schema';
+import { KnowledgeLevelSchema } from '../learner/schema';
 import { ExtensionSettingsSchema } from '../storage/local';
 
 const sessionId = z.string().min(1).max(100);
@@ -22,6 +24,17 @@ const RestorableSessionSchema = z.object({
   problem: ProblemContextSchema,
   stage: CoachStageSchema,
   messages: z.array(ChatMessageSchema).max(80),
+  usage: SessionUsageSchema.default(() => ({ ...EMPTY_SESSION_USAGE })),
+});
+
+export type RestorableSession = z.infer<typeof RestorableSessionSchema>;
+
+export const toRestorableSession = (session: CoachingSession): RestorableSession => ({
+  sessionId: session.id,
+  problem: session.problem,
+  stage: session.stage,
+  messages: session.messages,
+  usage: session.usage,
 });
 
 export const ActiveSessionResultSchema = z.object({
@@ -93,14 +106,7 @@ export const CoachServerEventSchema = z.discriminatedUnion('type', [
     status: CoachStatusSchema,
     label: z.string().max(200),
   }),
-  z.object({
-    type: z.literal('session:ready'),
-    sessionId,
-    problem: ProblemContextSchema,
-    stage: CoachStageSchema,
-    messages: z.array(ChatMessageSchema).max(80),
-    learnerSnapshot: LearnerSnapshotSchema,
-  }),
+  RestorableSessionSchema.extend({ type: z.literal('session:ready') }),
   z.object({
     type: z.literal('coach:chunk'),
     sessionId,
@@ -111,10 +117,12 @@ export const CoachServerEventSchema = z.discriminatedUnion('type', [
     sessionId,
     message: ChatMessageSchema,
     stage: CoachStageSchema,
+    usage: SessionUsageSchema,
   }),
   z.object({
     type: z.literal('coach:error'),
     message: z.string().min(1).max(1_000),
+    usage: SessionUsageSchema.optional(),
   }),
 ]);
 

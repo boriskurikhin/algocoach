@@ -48,7 +48,7 @@ describe('settings page', () => {
 
     expect(await screen.findByRole('heading', { name: 'OpenAI' })).toBeInTheDocument();
     expect(screen.getByText(/recoverable by someone/i)).toBeInTheDocument();
-    expect(screen.getByText(/Fast \(2× token price\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Standard \(half the price of Fast\)/)).toBeInTheDocument();
     expect(screen.getByText(/does not assign intelligence/i)).toBeInTheDocument();
     expect(
       Array.from(

@@ -7,6 +7,7 @@ import {
 import type { ExtensionSettings } from '../storage/local';
 import { CoachingMapSchema, type CoachingMap } from './schemas';
 import { requestStructuredResponse } from './openai-client';
+import type { SessionUsage } from './usage';
 
 export async function analyzeProblem(
   problem: ProblemContext,
@@ -14,6 +15,7 @@ export async function analyzeProblem(
   settings: ExtensionSettings,
   onActivity?: () => void,
   signal?: AbortSignal,
+  onUsage?: (usage: SessionUsage) => void,
 ): Promise<CoachingMap> {
   return requestStructuredResponse({
     settings,
@@ -28,5 +30,6 @@ export async function analyzeProblem(
       'OpenAI returned an incomplete problem analysis. Try the request again.',
     signal,
     reasoningMode: 'standard',
+    onUsage,
   });
 }

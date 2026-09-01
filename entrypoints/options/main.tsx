@@ -1,10 +1,5 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
 import '../../src/styles/global.css';
+import { mountApp } from '../../src/components/mount-app';
 import App from './App';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+mountApp(App);

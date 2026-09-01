@@ -51,29 +51,50 @@ test('loads the packaged settings and side-panel surfaces', async () => {
     `);
     await context.route('https://api.openai.com/v1/responses', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 31_000));
+      const response = {
+        id: 'resp_e2e',
+        object: 'response',
+        status: 'completed',
+        usage: {
+          input_tokens: 1_000,
+          input_tokens_details: {
+            cached_tokens: 0,
+            cache_write_tokens: 0,
+          },
+          output_tokens: 300,
+          output_tokens_details: { reasoning_tokens: 200 },
+          total_tokens: 1_300,
+        },
+        output: [
+          {
+            id: 'msg_e2e',
+            type: 'message',
+            role: 'assistant',
+            status: 'completed',
+            content: [
+              {
+                type: 'output_text',
+                text: JSON.stringify(coachingMapFixture),
+                annotations: [],
+              },
+            ],
+          },
+        ],
+      };
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: 'resp_e2e',
-          object: 'response',
-          status: 'completed',
-          output: [
+        contentType: 'text/event-stream',
+        body:
+          [
             {
-              id: 'msg_e2e',
-              type: 'message',
-              role: 'assistant',
-              status: 'completed',
-              content: [
-                {
-                  type: 'output_text',
-                  text: JSON.stringify(coachingMapFixture),
-                  annotations: [],
-                },
-              ],
+              type: 'response.created',
+              sequence_number: 0,
+              response: { ...response, status: 'in_progress', output: [] },
             },
-          ],
-        }),
+            { type: 'response.completed', sequence_number: 1, response },
+          ]
+            .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+            .join('') + 'data: [DONE]\n\n',
       });
     });
 
@@ -93,6 +114,7 @@ test('loads the packaged settings and side-panel surfaces', async () => {
     await expect(sidePanel.getByText(/I’ve read “Delayed test problem.”/)).toBeVisible({
       timeout: 40_000,
     });
+    await expect(sidePanel.getByText(/1\.3K tokens · ≈\$0\.020/)).toBeVisible();
   } finally {
     await context?.close();
   }

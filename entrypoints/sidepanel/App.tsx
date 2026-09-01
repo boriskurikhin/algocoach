@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import {
+  COACH_PROCESSING_LABEL,
   COACH_STEP_TIMEOUT_MS,
   type ChatMessage,
   type CoachStage,
   type CoachStatus,
 } from '../../src/agent/schemas';
+import {
+  EMPTY_SESSION_USAGE,
+  SESSION_COST_ESTIMATE_NOTE,
+  type SessionUsage,
+} from '../../src/agent/usage';
 import { MathText } from '../../src/components/MathText';
 import { MessageContent } from '../../src/components/MessageContent';
 import { manualProblemContext } from '../../src/extraction/recognize';
@@ -21,6 +27,7 @@ import {
   ActiveSessionResultSchema,
   CoachServerEventSchema,
   type PublicSettings,
+  type RestorableSession,
 } from '../../src/messaging/schema';
 import { Whiteboard } from '../../src/visualization/Whiteboard';
 import './sidepanel.css';
@@ -52,6 +59,33 @@ const localMessage = (content: string): ChatMessage => ({
   createdAt: Date.now(),
 });
 
+const compactNumber = new Intl.NumberFormat('en-US', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+const wholeNumber = new Intl.NumberFormat('en-US');
+
+function estimatedCost(value: number): string {
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  if (value < 1) return `$${value.toFixed(3)}`;
+  return `$${value.toFixed(2)}`;
+}
+
+function usageDetail(usage: SessionUsage): string {
+  const calls = `${wholeNumber.format(usage.modelCalls)} model ${
+    usage.modelCalls === 1 ? 'call' : 'calls'
+  }`;
+  return [
+    `${wholeNumber.format(usage.inputTokens)} input`,
+    `${wholeNumber.format(usage.cachedInputTokens)} cached`,
+    `${wholeNumber.format(usage.cacheWriteTokens)} cache writes`,
+    `${wholeNumber.format(usage.outputTokens)} output`,
+    `${wholeNumber.format(usage.reasoningTokens)} reasoning`,
+    calls,
+    SESSION_COST_ESTIMATE_NOTE,
+  ].join(' · ');
+}
+
 export default function App() {
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [extraction, setExtraction] = useState<ActiveProblemResult | null>(null);
@@ -64,6 +98,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [stage, setStage] = useState<CoachStage>('listen');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [usage, setUsage] = useState<SessionUsage>(EMPTY_SESSION_USAGE);
   const [draft, setDraft] = useState('');
   const [composer, setComposer] = useState('');
   const [status, setStatus] = useState<StatusState | null>(null);
@@ -86,6 +121,15 @@ export default function App() {
     },
     [finishRequest],
   );
+
+  const applySession = useCallback((session: RestorableSession) => {
+    setSessionId(session.sessionId);
+    setExtraction({ context: session.problem, likelyProblem: true });
+    setStage(session.stage);
+    setMessages(session.messages);
+    setUsage(session.usage);
+    setExtracting(false);
+  }, []);
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -132,16 +176,12 @@ export default function App() {
       );
       if (!result.session) return false;
 
-      setSessionId(result.session.sessionId);
-      setExtraction({ context: result.session.problem, likelyProblem: true });
-      setStage(result.session.stage);
-      setMessages(result.session.messages);
-      setExtracting(false);
+      applySession(result.session);
       return true;
     } catch {
       return false;
     }
-  }, []);
+  }, [applySession]);
 
   const grantSiteAccess = () => {
     if (!sitePattern) return;
@@ -175,8 +215,7 @@ export default function App() {
 
   useEffect(() => {
     let disposed = false;
-    let connectedPort: CoachPort | null = null;
-    let detachConnectedPort: (() => void) | null = null;
+    let activeConnection: { port: CoachPort; detach: () => void } | null = null;
 
     const onMessage = (rawEvent: unknown) => {
       const parsed = CoachServerEventSchema.safeParse(rawEvent);
@@ -201,17 +240,16 @@ export default function App() {
         }));
       } else if (event.type === 'session:ready') {
         finishRequest();
-        setSessionId(event.sessionId);
-        setExtraction({ context: event.problem, likelyProblem: true });
-        setStage(event.stage);
-        setMessages(event.messages);
+        applySession(event);
       } else if (event.type === 'coach:chunk') {
         setDraft((value) => value + event.chunk);
       } else if (event.type === 'coach:reply') {
         finishRequest();
         setMessages((value) => [...value, event.message]);
         setStage(event.stage);
+        setUsage(event.usage);
       } else {
+        if (event.usage) setUsage(event.usage);
         failRequest(event.message);
       }
     };
@@ -222,7 +260,6 @@ export default function App() {
 
       try {
         const port = browser.runtime.connect({ name: 'socratic-coach' });
-        connectedPort = port;
         portRef.current = port;
 
         const detach = () => {
@@ -232,10 +269,7 @@ export default function App() {
         const onDisconnect = () => {
           detach();
           const wasCurrent = portRef.current === port;
-          if (connectedPort === port) {
-            connectedPort = null;
-            detachConnectedPort = null;
-          }
+          if (activeConnection?.port === port) activeConnection = null;
           if (wasCurrent) portRef.current = null;
           if (disposed || !wasCurrent) return;
 
@@ -246,7 +280,7 @@ export default function App() {
           }
         };
 
-        detachConnectedPort = detach;
+        activeConnection = { port, detach };
         port.onMessage.addListener(onMessage);
         port.onDisconnect.addListener(onDisconnect);
         return port;
@@ -260,12 +294,12 @@ export default function App() {
     return () => {
       disposed = true;
       connectPortRef.current = () => null;
-      const port = connectedPort;
-      detachConnectedPort?.();
-      if (portRef.current === port) portRef.current = null;
-      port?.disconnect();
+      const connection = activeConnection;
+      connection?.detach();
+      if (portRef.current === connection?.port) portRef.current = null;
+      connection?.port.disconnect();
     };
-  }, [failRequest, finishRequest]);
+  }, [applySession, failRequest, finishRequest]);
 
   useEffect(() => {
     if (!status) return;
@@ -311,6 +345,7 @@ export default function App() {
     const now = Date.now();
     setError('');
     setMessages([]);
+    setUsage({ ...EMPTY_SESSION_USAGE });
     setStatusClock(now);
     setStatus({
       kind: 'studying',
@@ -351,23 +386,25 @@ export default function App() {
     });
   };
 
-  const changeProblem = () => {
-    if (status) return;
-    const activeSessionId = sessionId;
-    setSessionId(null);
-    setMessages([]);
-    finishRequest();
-    if (activeSessionId) {
-      void sendExtensionRequest({
+  const changeProblem = async () => {
+    if (status || !sessionId) return;
+    setError('');
+    try {
+      await sendExtensionRequest({
         type: 'session:clear-active',
-        sessionId: activeSessionId,
-      }).catch((caught) => {
-        setError(errorMessage(caught, 'Could not close the coaching session.'));
+        sessionId,
       });
+      setSessionId(null);
+      setMessages([]);
+      setUsage({ ...EMPTY_SESSION_USAGE });
+      finishRequest();
+    } catch (caught) {
+      setError(errorMessage(caught, 'Could not close the coaching session.'));
     }
   };
 
   const problem = extraction?.context;
+  const sessionUsageDetail = usage.modelCalls ? usageDetail(usage) : '';
 
   return (
     <main className="panel-shell">
@@ -502,12 +539,24 @@ export default function App() {
       ) : (
         <>
           <section className="session-heading">
-            <p className="eyebrow">Hint stage: {stage}</p>
-            <h2>{problem?.title || 'Coaching session'}</h2>
+            <div className="session-summary">
+              <p className="eyebrow">Hint stage: {stage}</p>
+              <h2>{problem?.title || 'Coaching session'}</h2>
+              {usage.modelCalls ? (
+                <p
+                  className="session-usage"
+                  title={sessionUsageDetail}
+                  aria-label={sessionUsageDetail}
+                >
+                  {compactNumber.format(usage.inputTokens + usage.outputTokens)} tokens
+                  {' · '}≈{estimatedCost(usage.estimatedCostUsd)}
+                </p>
+              ) : null}
+            </div>
             <button
               className="link-button"
               type="button"
-              onClick={changeProblem}
+              onClick={() => void changeProblem()}
               disabled={Boolean(status)}
             >
               Change problem
@@ -575,7 +624,9 @@ export default function App() {
               {statusDetail[status.kind]}
               {status.kind === 'saving-profile'
                 ? ''
-                : ` · Fast · ${settings?.reasoningEffort ?? 'high'} reasoning`}
+                : ` · ${COACH_PROCESSING_LABEL} · ${
+                    settings?.reasoningEffort ?? 'high'
+                  } reasoning`}
               {' · '}
               {elapsedTime(status.startedAt, statusClock)} elapsed
               {status.kind === 'saving-profile'

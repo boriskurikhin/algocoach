@@ -1,10 +1,13 @@
 .whiteboard {
+  --visual-primary: #c92552;
+  --visual-secondary: #326fa8;
+  --visual-line: #777771;
   margin: 1.25rem 0;
   padding: 1rem 0;
   border-block: 1px solid var(--border);
 }
 
-.whiteboard header {
+.whiteboard-heading {
   margin-bottom: 0.75rem;
 }
 
@@ -16,8 +19,8 @@
 .whiteboard-canvas {
   display: block;
   width: 100%;
-  max-height: 25rem;
-  background: var(--paper-muted);
+  max-height: 28rem;
+  background: var(--paper);
   border: 1px solid var(--border);
   animation: whiteboard-frame 180ms ease-out;
 }
@@ -25,7 +28,10 @@
 .visual-label,
 .visual-value,
 .visual-index,
-.visual-note {
+.visual-array-index,
+.visual-note,
+.visual-pointer-label,
+.visual-range-label {
   fill: var(--ink);
   font-family: var(--font-sans);
 }
@@ -46,28 +52,74 @@
   fill: var(--ink-muted);
 }
 
+.visual-index.state-active {
+  fill: var(--visual-primary);
+  font-weight: 700;
+}
+
+.visual-index.state-secondary {
+  fill: var(--visual-secondary);
+  font-weight: 700;
+}
+
+.visual-array-index {
+  font-size: 11px;
+  text-anchor: middle;
+  fill: var(--visual-primary);
+}
+
 .visual-note {
   font-size: 15px;
+}
+
+.visual-pointer-label,
+.visual-range-label {
+  font-size: 11px;
+  text-anchor: middle;
 }
 
 .visual-cell,
 .visual-node {
   fill: var(--paper);
-  stroke: var(--ink);
-  stroke-width: 1.5;
+  stroke: var(--visual-line);
+  stroke-width: 1;
   transition:
     fill 160ms ease,
+    stroke 160ms ease,
     stroke-width 160ms ease;
 }
 
-.visual-cell.is-active,
+.visual-cell.state-active,
 .visual-node.state-active {
-  fill: var(--accent-soft);
-  stroke-width: 3;
+  fill: var(--visual-primary);
+  stroke: var(--visual-primary);
+  stroke-width: 2;
 }
 
+.visual-cell.state-secondary,
+.visual-node.state-secondary {
+  stroke: var(--visual-secondary);
+  stroke-width: 2;
+}
+
+.visual-value.state-active {
+  fill: white;
+  font-weight: 700;
+}
+
+.visual-value.state-secondary,
+.visual-note.state-secondary,
+.visual-range-label.state-secondary {
+  fill: var(--visual-secondary);
+  font-weight: 700;
+}
+
+.visual-cell.state-muted,
 .visual-node.state-muted,
-.visual-edge.state-muted {
+.visual-edge.state-muted,
+.visual-note.state-muted,
+.visual-index.state-muted,
+.visual-range-label.state-muted {
   opacity: 0.35;
 }
 
@@ -76,16 +128,33 @@
   stroke-width: 3;
 }
 
+.visual-note.state-warning,
+.visual-index.state-warning,
+.visual-range-label.state-warning {
+  fill: var(--danger);
+  font-weight: 700;
+}
+
 .visual-edge,
 .visual-pointer {
   fill: none;
-  stroke: var(--ink);
-  stroke-width: 1.5;
+  stroke: var(--visual-line);
+  stroke-width: 1;
+}
+
+.visual-pointer {
+  stroke: var(--visual-primary);
+  stroke-width: 2;
 }
 
 .visual-edge.state-active {
-  stroke: var(--accent);
-  stroke-width: 3;
+  stroke: var(--visual-primary);
+  stroke-width: 2.5;
+}
+
+.visual-edge.state-secondary {
+  stroke: var(--visual-secondary);
+  stroke-width: 2;
 }
 
 .visual-edge.state-warning {
@@ -93,8 +162,38 @@
   stroke-dasharray: 5 4;
 }
 
+.visual-range {
+  stroke: var(--visual-line);
+  stroke-width: 2;
+}
+
+.visual-range.state-active {
+  stroke: var(--visual-primary);
+  stroke-width: 3;
+}
+
+.visual-range.state-secondary {
+  stroke: var(--visual-secondary);
+  stroke-width: 3;
+}
+
+.visual-range.state-muted {
+  opacity: 0.35;
+}
+
+.visual-range-label.state-active,
+.visual-note.state-active,
+.visual-pointer-label {
+  fill: var(--visual-primary);
+  font-weight: 700;
+}
+
+.visual-range.state-warning {
+  stroke-dasharray: 5 4;
+}
+
 .visual-arrowhead {
-  fill: var(--ink);
+  fill: context-stroke;
 }
 
 .whiteboard-caption,
@@ -119,8 +218,17 @@
 }
 
 .whiteboard-controls button {
+  min-height: auto;
   padding: 0.3rem 0.55rem;
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--border);
   font-size: 0.78rem;
+}
+
+.whiteboard-controls button:hover:not(:disabled) {
+  color: var(--visual-primary);
+  background: var(--paper-muted);
 }
 
 .whiteboard-controls span {
@@ -144,5 +252,17 @@
   .visual-cell,
   .visual-node {
     transition: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .whiteboard {
+    --visual-primary: #f06388;
+    --visual-secondary: #8dbcf0;
+    --visual-line: #8c8c85;
+  }
+
+  .visual-value.state-active {
+    fill: #1a1114;
   }
 }

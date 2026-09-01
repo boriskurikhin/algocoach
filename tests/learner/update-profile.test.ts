@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProfileObservation } from '../../src/learner/schema';
 import {
+  applyKnowledgeCorrection,
   applyProfileObservations,
   buildLearnerSnapshot,
   createEmptyLearnerProfile,
@@ -62,6 +63,32 @@ describe('learner profile updates', () => {
     expect(profile.languages.python?.confidence).toBeLessThan(0.6);
     expect(profile.languages.python?.level).toBe('practicing');
     expect(profile.languages.python?.demonstratedCount).toBe(0);
+  });
+
+  it('records explicit learner corrections as pinned self-reports', () => {
+    const profile = applyKnowledgeCorrection(
+      createEmptyLearnerProfile(100),
+      {
+        dimension: 'concepts',
+        key: 'FFT',
+        level: 'reliable',
+        pinned: true,
+      },
+      200,
+    );
+
+    expect(profile.concepts.fft).toMatchObject({
+      level: 'reliable',
+      confidence: 1,
+      sampleCount: 1,
+      pinned: true,
+      evidence: [
+        expect.objectContaining({
+          type: 'self-reported',
+          note: 'The learner corrected this estimate in Settings.',
+        }),
+      ],
+    });
   });
 
   it('does not turn one difficult moment into a downgrade', () => {

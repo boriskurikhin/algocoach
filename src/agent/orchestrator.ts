@@ -1,5 +1,4 @@
 import type { ProblemContext } from '../extraction/schema';
-import type { LearnerSnapshot } from '../learner/schema';
 import {
   buildLearnerSnapshot,
   applyProfileObservations,
@@ -17,8 +16,9 @@ import {
   type CoachStatus,
   type CoachingSession,
 } from './schemas';
+import { addSessionUsage, EMPTY_SESSION_USAGE, type SessionUsage } from './usage';
 
-export interface CoachingHooks {
+interface CoachingHooks {
   settings: ExtensionSettings;
   onStatus?: (status: CoachStatus, label: string) => void;
   onModelActivity?: () => void;
@@ -29,8 +29,12 @@ const newId = (): string => crypto.randomUUID();
 
 export async function startCoachingSession(
   input: CoachingHooks & { problem: ProblemContext },
-): Promise<{ session: CoachingSession; learnerSnapshot: LearnerSnapshot }> {
+): Promise<CoachingSession> {
   input.onStatus?.('studying', 'Studying the problem before we talk…');
+  let usage = { ...EMPTY_SESSION_USAGE };
+  const recordUsage = (reported: SessionUsage) => {
+    usage = addSessionUsage(usage, reported);
+  };
   const profile = await getLearnerProfile();
   const learnerSnapshot = buildLearnerSnapshot(profile, [
     input.problem.title,
@@ -42,14 +46,15 @@ export async function startCoachingSession(
     input.settings,
     input.onModelActivity,
     input.signal,
+    recordUsage,
   );
   const now = Date.now();
   const opening = ChatMessageSchema.parse({
     id: newId(),
     role: 'assistant',
     content:
-      `I’ve read “${input.problem.title}.” Before I offer any direction, ` +
-      'what are you thinking so far, and where does your reasoning start to feel uncertain?',
+      `I’ve read “${input.problem.title}.” Let’s start with your model of the ` +
+      'problem: what happens in the smallest example you can trace?',
     createdAt: now,
   });
   const session = CoachingSessionSchema.parse({
@@ -60,11 +65,11 @@ export async function startCoachingSession(
     coachingMap,
     stage: 'listen',
     messages: [opening],
+    usage,
     createdAt: now,
     updatedAt: now,
   });
-  await saveSession(session);
-  return { session, learnerSnapshot };
+  return saveSession(session);
 }
 
 export async function respondToLearner(
@@ -88,59 +93,82 @@ export async function respondToLearner(
   });
   await saveSession(withUser);
 
-  const profile = await getLearnerProfile();
-  const learnerSnapshot = buildLearnerSnapshot(profile, [
-    withUser.problem.title,
-    ...withUser.problem.tags,
-    ...withUser.coachingMap.relevantConcepts,
-  ]);
+  let usage = withUser.usage;
+  const initialModelCalls = usage.modelCalls;
+  const recordUsage = (reported: SessionUsage) => {
+    usage = addSessionUsage(usage, reported);
+  };
 
-  input.onStatus?.('coaching', 'Choosing the smallest useful question…');
-  const candidate = await draftCoachResponse(
-    withUser,
-    learnerSnapshot,
-    input.settings,
-    input.onModelActivity,
-    input.signal,
-  );
+  try {
+    const profile = await getLearnerProfile();
+    const learnerSnapshot = buildLearnerSnapshot(profile, [
+      withUser.problem.title,
+      ...withUser.problem.tags,
+      ...withUser.coachingMap.relevantConcepts,
+    ]);
 
-  input.onStatus?.('checking', 'Checking that the hint gives nothing away…');
-  const guarded = await guardCoachResponse({
-    stage: withUser.stage,
-    latestLearnerMessage: userMessage.content,
-    candidateReply: candidate.reply,
-    ...(candidate.visualization ? { visualization: candidate.visualization } : {}),
-    coachingMap: withUser.coachingMap,
-    learner: learnerSnapshot,
-    problemKey: withUser.problemKey,
-    settings: input.settings,
-    onActivity: input.onModelActivity,
-    signal: input.signal,
-  });
+    input.onStatus?.('coaching', 'Choosing the smallest useful question…');
+    const candidate = await draftCoachResponse(
+      withUser,
+      learnerSnapshot,
+      input.settings,
+      input.onModelActivity,
+      input.signal,
+      recordUsage,
+    );
 
-  input.onStatus?.('saving-profile', 'Remembering only useful learning signals…');
-  const observations = guarded.profileObservations.map((observation) => ({
-    ...observation,
-    problemKey: observation.problemKey || withUser.problemKey,
-  }));
-  const updatedProfile = applyProfileObservations(profile, observations);
-  await saveLearnerProfile(updatedProfile);
+    input.onStatus?.('checking', 'Checking that the hint gives nothing away…');
+    const guarded = await guardCoachResponse({
+      sessionId: withUser.id,
+      stage: withUser.stage,
+      latestLearnerMessage: userMessage.content,
+      candidateReply: candidate.reply,
+      ...(candidate.visualization ? { visualization: candidate.visualization } : {}),
+      coachingMap: withUser.coachingMap,
+      learner: learnerSnapshot,
+      problemKey: withUser.problemKey,
+      settings: input.settings,
+      onActivity: input.onModelActivity,
+      signal: input.signal,
+      onUsage: recordUsage,
+    });
 
-  const assistantMessage = ChatMessageSchema.parse({
-    id: newId(),
-    role: 'assistant',
-    content: guarded.safeReply,
-    createdAt: Date.now(),
-    ...(guarded.allowVisualization && candidate.visualization
-      ? { visualization: candidate.visualization }
-      : {}),
-  });
-  const session = CoachingSessionSchema.parse({
-    ...withUser,
-    stage: guarded.nextStage,
-    messages: [...withUser.messages, assistantMessage].slice(-80),
-    updatedAt: Date.now(),
-  });
-  await saveSession(session);
-  return { session, message: assistantMessage };
+    input.onStatus?.('saving-profile', 'Remembering only useful learning signals…');
+    const observations = guarded.profileObservations.map((observation) => ({
+      ...observation,
+      problemKey: observation.problemKey || withUser.problemKey,
+    }));
+    const updatedProfile = applyProfileObservations(profile, observations);
+    await saveLearnerProfile(updatedProfile);
+
+    const assistantMessage = ChatMessageSchema.parse({
+      id: newId(),
+      role: 'assistant',
+      content: guarded.safeReply,
+      createdAt: Date.now(),
+      ...(guarded.allowVisualization && candidate.visualization
+        ? { visualization: candidate.visualization }
+        : {}),
+    });
+    const session = CoachingSessionSchema.parse({
+      ...withUser,
+      stage: guarded.nextStage,
+      messages: [...withUser.messages, assistantMessage].slice(-80),
+      usage,
+      updatedAt: Date.now(),
+    });
+    await saveSession(session);
+    return { session, message: assistantMessage };
+  } catch (error) {
+    if (usage.modelCalls > initialModelCalls) {
+      await saveSession(
+        CoachingSessionSchema.parse({
+          ...withUser,
+          usage,
+          updatedAt: Date.now(),
+        }),
+      ).catch(() => undefined);
+    }
+    throw error;
+  }
 }

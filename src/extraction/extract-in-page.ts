@@ -165,6 +165,18 @@ export function extractProblemFromDocument(
   const unique = (values: string[]): string[] =>
     Array.from(new Set(values.map((value) => normalize(value, 5_000)))).filter(Boolean);
 
+  const problemSignalPatterns = [
+    /\binputs?\b/,
+    /\boutputs?\b/,
+    /\bconstraint/,
+    /\bsamples?\b|\bexamples?\b/,
+    /\bprint\b|\bdetermine\b|\bcompute\b|\bgiven\b/,
+  ];
+  const problemSignalCount = (value: string): number => {
+    const lower = value.toLowerCase();
+    return problemSignalPatterns.filter((pattern) => pattern.test(lower)).length;
+  };
+
   const sectionText = (selectors: string[]): string =>
     firstText(selectors, 40_000, config.removeSelectors);
 
@@ -173,23 +185,52 @@ export function extractProblemFromDocument(
       .map((node) => textOf(node, 20_000, removeSelectors))
       .filter(Boolean);
 
-  const roots = query(config.statementSelectors);
+  const titleNode = query(config.titleSelectors)[0];
+  const configuredRoots = query(config.statementSelectors);
+  let inferredGenericRoot: Element | undefined;
+  // Client-rendered problem libraries often use only anonymous divs. Walk
+  // outward from the title and stop at the first problem-shaped container.
+  if (config.site === 'generic' && titleNode) {
+    let candidate = titleNode.parentElement;
+    while (candidate && candidate !== document.body) {
+      const candidateText = normalize(
+        (candidate as HTMLElement).innerText || candidate.textContent || '',
+        120_000,
+      );
+      const candidateWords = candidateText.split(/\s+/).filter(Boolean).length;
+      if (candidateWords >= 80 && problemSignalCount(candidateText) >= 3) {
+        inferredGenericRoot = candidate;
+        break;
+      }
+      candidate = candidate.parentElement;
+    }
+  }
+
+  const preferInferredRoot =
+    inferredGenericRoot &&
+    (configuredRoots.length === 0 ||
+      (configuredRoots.length === 1 &&
+        configuredRoots[0]?.contains(inferredGenericRoot)));
+  const roots =
+    preferInferredRoot && inferredGenericRoot ? [inferredGenericRoot] : configuredRoots;
+  const rootStatement = roots
+    .map((root) => textOf(root, 120_000, config.removeSelectors))
+    .filter(Boolean)
+    .join('\n\n');
+  const usedBodyFallback = !rootStatement;
   const statement =
-    roots
-      .map((root) => textOf(root, 120_000, config.removeSelectors))
-      .filter(Boolean)
-      .join('\n\n') || textOf(document.body, 120_000, config.removeSelectors);
+    rootStatement || textOf(document.body, 120_000, config.removeSelectors);
 
   const sections: ProblemContext['sections'] = [];
   for (const root of roots.slice(0, 3)) {
-    const headings = Array.from(root.querySelectorAll('h1, h2, h3, h4'));
+    const headings = Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6'));
     for (const heading of headings.slice(0, 50)) {
       const headingText = textOf(heading, 200);
       if (!headingText) continue;
 
       const bodies: string[] = [];
       let sibling = heading.nextElementSibling;
-      while (sibling && !/^H[1-4]$/.test(sibling.tagName)) {
+      while (sibling && !/^H[1-6]$/.test(sibling.tagName)) {
         const value = textOf(sibling, 10_000, config.removeSelectors);
         if (value) bodies.push(value);
         sibling = sibling.nextElementSibling;
@@ -203,8 +244,12 @@ export function extractProblemFromDocument(
   const sectionByName = (pattern: RegExp): string | undefined =>
     sections.find(({ heading }) => pattern.test(heading))?.body;
 
-  const input = sectionText(config.inputSelectors) || sectionByName(/\binput\b/i);
-  const output = sectionText(config.outputSelectors) || sectionByName(/\boutput\b/i);
+  const input =
+    sectionText(config.inputSelectors) ||
+    sectionByName(/^(?:the\s+)?input(?:\s+(?:data|format|specification))?\s*:?\s*$/i);
+  const output =
+    sectionText(config.outputSelectors) ||
+    sectionByName(/^(?:the\s+)?output(?:\s+(?:data|format|specification))?\s*:?\s*$/i);
 
   const explicitConstraints = allText(
     config.constraintsSelectors,
@@ -249,7 +294,30 @@ export function extractProblemFromDocument(
       .flatMap((root) => Array.from(root.querySelectorAll('pre')))
       .map((node) => textOf(node, 20_000))
       .filter(Boolean);
-    if (preformatted.length >= 2 && preformatted.length % 2 === 0) {
+
+    const splitLabeledSample = (
+      value: string,
+    ): { input: string; output: string } | null => {
+      // Some editors place both halves in one block. Require explicit labels
+      // at line boundaries so ordinary preformatted text is never split.
+      const match = value.match(
+        /(?:^|\n)[ \t]*(?:sample[ \t]+)?input[ \t]*:[ \t]*(?:\n|$)([\s\S]*?)(?:^|\n)[ \t]*(?:sample[ \t]+)?output[ \t]*:[ \t]*(?:\n|$)([\s\S]*)/im,
+      );
+      if (!match) return null;
+      const sampleInput = normalize(match[1] ?? '', 20_000);
+      const sampleOutput = normalize(match[2] ?? '', 20_000);
+      return sampleInput || sampleOutput
+        ? { input: sampleInput, output: sampleOutput }
+        : null;
+    };
+    const labeledSamples = preformatted
+      .map(splitLabeledSample)
+      .filter((sample): sample is { input: string; output: string } => sample !== null);
+
+    if (labeledSamples.length > 0) {
+      sampleInputs = labeledSamples.map((sample) => sample.input);
+      sampleOutputs = labeledSamples.map((sample) => sample.output);
+    } else if (preformatted.length >= 2 && preformatted.length % 2 === 0) {
       sampleInputs = preformatted.filter((_, index) => index % 2 === 0);
       sampleOutputs = preformatted.filter((_, index) => index % 2 === 1);
     }
@@ -268,7 +336,7 @@ export function extractProblemFromDocument(
   );
 
   const title =
-    firstText(config.titleSelectors, 500) ||
+    textOf(titleNode, 500) ||
     normalize(document.title.replace(/\s*[-|].*$/, ''), 500) ||
     'Untitled problem';
 
@@ -283,15 +351,8 @@ export function extractProblemFromDocument(
     .map((tag) => tag.replace(/^x\d+\s*/i, '').trim())
     .filter(Boolean);
 
-  const lowerStatement = statement.toLowerCase();
   const wordCount = statement.split(/\s+/).filter(Boolean).length;
-  const problemSignals = [
-    /\binputs?\b/,
-    /\boutputs?\b/,
-    /\bconstraint/,
-    /\bsamples?\b|\bexamples?\b/,
-    /\bprint\b|\bdetermine\b|\bcompute\b|\bgiven\b/,
-  ].filter((pattern) => pattern.test(lowerStatement)).length;
+  const problemSignals = problemSignalCount(statement);
 
   let confidence = config.baseConfidence;
   if (title.length > 2) confidence += 0.01;
@@ -301,6 +362,7 @@ export function extractProblemFromDocument(
   if (config.site === 'generic') {
     confidence = Math.min(0.82, confidence + problemSignals * 0.08);
     if (wordCount < 40) confidence -= 0.2;
+    if (usedBodyFallback) confidence -= 0.12;
   }
 
   const warnings: string[] = [];
@@ -310,6 +372,9 @@ export function extractProblemFromDocument(
   }
   if (config.site === 'generic') {
     warnings.push('This page used the generic problem extractor.');
+    if (usedBodyFallback) {
+      warnings.push('The generic extractor could not isolate a problem container.');
+    }
   }
 
   return {

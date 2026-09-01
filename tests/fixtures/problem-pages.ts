@@ -190,6 +190,55 @@ export const csesProblemHtml = `
   </body></html>
 `;
 
+export const divOnlyProblemHtml = `
+  <html><head><title>Credit Timeline | Interview Archive</title></head>
+  <body>
+    <div class="site-shell">
+      <div class="site-menu"><a href="/problems">Problems</a><a href="/people">People</a></div>
+      <div class="three-column-layout">
+        <div class="prompt-card">
+          <div class="title-row"><h1>Credit Timeline</h1></div>
+          <div class="difficulty-pill">Medium</div>
+          <div class="copy-block">
+            <p>
+              You are given credit grants that are active over half-open time
+              intervals. Determine the available balance at requested timestamps.
+              ${longStatement}
+            </p>
+            <h6>Input Format:</h6>
+            <p>The first line contains the number of operations, followed by one operation per line.</p>
+            <h6>Output Format:</h6>
+            <p>Print the balance for every requested timestamp.</p>
+            <h6>Example 1:</h6>
+            <pre>Input:
+4
+grant a 3 10 60
+balance 10
+balance 60
+
+Output:
+3
+0</pre>
+            <h6>Constraints:</h6>
+            <ul>
+              <li>1 ≤ operations ≤ 100000</li>
+              <li>0 ≤ timestamp ≤ 1000000000</li>
+            </ul>
+          </div>
+          <div>0 comments</div>
+        </div>
+      </div>
+      <div class="discovery-rail">
+        <h2>Related interviews</h2>
+        <p>RELATED MATERIAL MUST NOT ENTER THE PROBLEM STATEMENT.</p>
+      </div>
+      <div class="mentor-directory">
+        <p>EXPERT DIRECTORY MUST NOT ENTER THE PROBLEM STATEMENT.</p>
+      </div>
+    </div>
+  </body></html>
+`;
+
 export const nonProblemHtml = `
   <html><head><title>Account settings</title></head>
   <body><main><h1>Account settings</h1><p>Change your display name.</p></main></body></html>

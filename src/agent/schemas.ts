@@ -2,8 +2,11 @@ import { z } from 'zod';
 import { ProblemContextSchema } from '../extraction/schema';
 import { ProfileObservationSchema } from '../learner/schema';
 import { DrawConceptSchema } from '../visualization/schema';
+import { EMPTY_SESSION_USAGE, SessionUsageSchema } from './usage';
 
 export const COACH_STEP_TIMEOUT_MS = 90_000;
+export const COACH_PROCESSING_TIER = 'default' as const;
+export const COACH_PROCESSING_LABEL = 'Standard';
 
 const shortId = z.string().min(1).max(100);
 
@@ -69,6 +72,7 @@ export const CoachingSessionSchema = z.object({
   coachingMap: CoachingMapSchema,
   stage: CoachStageSchema,
   messages: z.array(ChatMessageSchema).max(80),
+  usage: SessionUsageSchema.default(() => ({ ...EMPTY_SESSION_USAGE })),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });
@@ -81,6 +85,9 @@ const GuardViolationSchema = z.enum([
   'overpowered-hint',
   'answer-revealing-visualization',
   'multiple-interventions',
+  'overloaded-explanation',
+  'unearned-abstraction',
+  'cluttered-visualization',
   'patronizing-tone',
   'unsupported-learner-label',
   'none',

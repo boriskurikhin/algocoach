@@ -46,7 +46,9 @@ describe('coach response drafting', () => {
     expect(mocks.parse.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
         model: 'gpt-5.6-sol',
-        service_tier: 'fast',
+        service_tier: 'default',
+        prompt_cache_key: 'socratic-coach:coach:session-1',
+        prompt_cache_options: { mode: 'implicit', ttl: '30m' },
         store: false,
         parallel_tool_calls: false,
         text: { verbosity: 'low' },

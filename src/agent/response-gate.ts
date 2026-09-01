@@ -1,7 +1,8 @@
 import type { LearnerSnapshot } from '../learner/schema';
 import { RESPONSE_GUARD_SYSTEM_PROMPT, buildGuardInput } from '../prompts/guard';
+import { MAX_TEACHING_SNIPPET_LINES } from '../prompts/policy';
 import type { ExtensionSettings } from '../storage/local';
-import type { DrawConcept } from '../visualization/schema';
+import { isFocusedVisualization, type DrawConcept } from '../visualization/schema';
 import { requestStructuredResponse } from './openai-client';
 import {
   GuardResultSchema,
@@ -9,6 +10,7 @@ import {
   type CoachingMap,
   type GuardResult,
 } from './schemas';
+import type { SessionUsage } from './usage';
 
 const stageOrder: CoachStage[] = [
   'listen',
@@ -38,7 +40,7 @@ export function hasObviousSolutionLeak(value: string): boolean {
     snippets.some(
       (snippet) =>
         snippet.length > 600 ||
-        snippet.trim().split('\n').length > 8 ||
+        snippet.trim().split('\n').length > MAX_TEACHING_SNIPPET_LINES ||
         /\b(?:class|def|function|fn|func)\s+\w+|(?:^|\n)\s*(?:[\w:<>,*&]+\s+)+\w+\s*\([^;]*\)\s*\{/i.test(
           snippet,
         ),
@@ -55,6 +57,7 @@ export function hasObviousSolutionLeak(value: string): boolean {
 }
 
 export async function guardCoachResponse(input: {
+  sessionId: string;
   stage: CoachStage;
   latestLearnerMessage: string;
   candidateReply: string;
@@ -65,6 +68,7 @@ export async function guardCoachResponse(input: {
   settings: ExtensionSettings;
   onActivity?: () => void;
   signal?: AbortSignal;
+  onUsage?: (usage: SessionUsage) => void;
 }): Promise<GuardResult> {
   const guarded = await requestStructuredResponse({
     settings: input.settings,
@@ -77,6 +81,8 @@ export async function guardCoachResponse(input: {
     invalidResultMessage:
       'OpenAI returned an incomplete hint-safety check. Try the request again.',
     signal: input.signal,
+    onUsage: input.onUsage,
+    promptCacheKey: `socratic-coach:guard:${input.sessionId}`,
   });
 
   if (hasObviousSolutionLeak(guarded.safeReply)) {
@@ -95,6 +101,8 @@ export async function guardCoachResponse(input: {
     ...guarded,
     nextStage: clampStage(input.stage, guarded.nextStage),
     allowVisualization:
-      guarded.allowed && guarded.allowVisualization && Boolean(input.visualization),
+      guarded.allowed &&
+      guarded.allowVisualization &&
+      Boolean(input.visualization && isFocusedVisualization(input.visualization)),
   };
 }
