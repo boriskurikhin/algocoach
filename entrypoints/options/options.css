@@ -1,0 +1,136 @@
+.options-shell {
+  width: min(100% - 2rem, 43rem);
+  margin: 2.5rem auto 5rem;
+}
+
+.options-shell > header,
+.options-shell > section {
+  margin-bottom: 2.5rem;
+}
+
+.options-shell > header {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--ink);
+}
+
+.options-shell > section {
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.split-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.secondary-button {
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--border);
+}
+
+.secondary-button:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--paper-muted);
+}
+
+.danger-button {
+  color: var(--danger);
+}
+
+.toggle-row,
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.toggle-row input,
+.inline-check input {
+  width: auto;
+  margin: 0;
+}
+
+.declare-skill {
+  margin: 1.5rem 0;
+  padding-block: 0.8rem;
+  border-block: 1px solid var(--border);
+}
+
+.declare-skill summary {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.profile-section {
+  margin-top: 1.5rem;
+}
+
+.profile-section h3 {
+  font-size: 1rem;
+}
+
+.estimate-list {
+  padding: 0;
+  list-style: none;
+}
+
+.estimate-list li {
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.estimate-list strong {
+  display: block;
+}
+
+.estimate-meta {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+.estimate-controls {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+}
+
+.estimate-controls select {
+  margin: 0;
+}
+
+.estimate-controls .inline-check {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.evidence {
+  margin: 0.5rem 0 0;
+  color: var(--ink-muted);
+  font-family: var(--font-serif);
+  font-size: 0.85rem;
+}
+
+.profile-actions {
+  margin-top: 2rem;
+}
+
+@media (max-width: 36rem) {
+  .split-fields,
+  .estimate-controls {
+    grid-template-columns: 1fr;
+  }
+}

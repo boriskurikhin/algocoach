@@ -1,0 +1,148 @@
+.whiteboard {
+  margin: 1.25rem 0;
+  padding: 1rem 0;
+  border-block: 1px solid var(--border);
+}
+
+.whiteboard header {
+  margin-bottom: 0.75rem;
+}
+
+.whiteboard h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.whiteboard-canvas {
+  display: block;
+  width: 100%;
+  max-height: 25rem;
+  background: var(--paper-muted);
+  border: 1px solid var(--border);
+  animation: whiteboard-frame 180ms ease-out;
+}
+
+.visual-label,
+.visual-value,
+.visual-index,
+.visual-note {
+  fill: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.visual-label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.visual-value {
+  font-size: 13px;
+  text-anchor: middle;
+}
+
+.visual-index {
+  font-size: 11px;
+  text-anchor: middle;
+  fill: var(--ink-muted);
+}
+
+.visual-note {
+  font-size: 15px;
+}
+
+.visual-cell,
+.visual-node {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  transition:
+    fill 160ms ease,
+    stroke-width 160ms ease;
+}
+
+.visual-cell.is-active,
+.visual-node.state-active {
+  fill: var(--accent-soft);
+  stroke-width: 3;
+}
+
+.visual-node.state-muted,
+.visual-edge.state-muted {
+  opacity: 0.35;
+}
+
+.visual-node.state-warning {
+  fill: var(--warning-soft);
+  stroke-width: 3;
+}
+
+.visual-edge,
+.visual-pointer {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.visual-edge.state-active {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.visual-edge.state-warning {
+  stroke-width: 3;
+  stroke-dasharray: 5 4;
+}
+
+.visual-arrowhead {
+  fill: var(--ink);
+}
+
+.whiteboard-caption,
+.whiteboard-question {
+  margin: 0.65rem 0;
+}
+
+.whiteboard-caption {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.whiteboard-question {
+  font-weight: 650;
+}
+
+.whiteboard-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.whiteboard-controls button {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.whiteboard-controls span {
+  margin-left: auto;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+@keyframes whiteboard-frame {
+  from {
+    opacity: 0.6;
+    transform: translateY(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .whiteboard-canvas {
+    animation: none;
+  }
+
+  .visual-cell,
+  .visual-node {
+    transition: none;
+  }
+}

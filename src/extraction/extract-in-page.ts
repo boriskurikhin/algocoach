@@ -1,0 +1,337 @@
+import type { ProblemContext } from './schema';
+import type { ProblemAdapterConfig } from './adapters/types';
+
+/**
+ * This function is serialized by chrome.scripting.executeScript. Keep every
+ * runtime helper inside its body so it has no extension-world closures.
+ */
+export function extractProblemFromDocument(
+  config: ProblemAdapterConfig,
+): ProblemContext {
+  const normalize = (value: string, limit: number): string =>
+    value
+      .replace(/\r/g, '')
+      .replace(/[\t ]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[^\S\n]{2,}/g, ' ')
+      .trim()
+      .slice(0, limit);
+
+  const query = (selectors: string[], root: ParentNode = document): Element[] => {
+    for (const selector of selectors) {
+      try {
+        const matches = Array.from(root.querySelectorAll(selector));
+        if (matches.length > 0) return matches;
+      } catch {
+        // A site may roll out selectors unsupported by an older Chrome.
+      }
+    }
+    return [];
+  };
+
+  const isTexSource = (element: Element): boolean =>
+    element.localName === 'script' &&
+    (element.getAttribute('type') ?? '').startsWith('math/tex');
+
+  /**
+   * Reading rendered math as text silently corrupts it: MathJax turns
+   * `10^5` into `105`, which rewrites a constraint by four orders of
+   * magnitude. Restore the TeX source, or failing that the structure, so a
+   * bound survives extraction.
+   */
+  const inlineMath = (root: HTMLElement): void => {
+    const replaceWithTex = (host: Element, source: string, display: boolean) => {
+      if (!source) {
+        host.remove();
+        return;
+      }
+      const fence = display ? '$$' : '$';
+      const text = display
+        ? '\n' + fence + source + fence + '\n'
+        : fence + source + fence;
+      host.replaceWith(document.createTextNode(text));
+    };
+
+    // KaTeX and hand-written MathML keep the TeX beside the rendered output.
+    for (const node of query(['annotation[encoding="application/x-tex"]'], root)) {
+      const display = node.closest('.katex-display');
+      const host = display ?? node.closest('.katex') ?? node.closest('math') ?? node;
+      replaceWithTex(host, node.textContent?.trim() ?? '', Boolean(display));
+    }
+
+    // MathJax v2 emits the source as a script next to its rendered frames.
+    for (const node of query(['script[type^="math/tex"]'], root)) {
+      let sibling = node.previousElementSibling;
+      while (
+        sibling &&
+        Array.from(sibling.classList).some((name) => name.startsWith('MathJax'))
+      ) {
+        const previous = sibling.previousElementSibling;
+        sibling.remove();
+        sibling = previous;
+      }
+      const type = node.getAttribute('type') ?? '';
+      replaceWithTex(
+        node,
+        node.textContent?.trim() ?? '',
+        type.includes('mode=display'),
+      );
+    }
+
+    // MathJax v3 ships no TeX, but its assistive MathML keeps the nesting.
+    // Reverse order so an inner script is rewritten before its container.
+    for (const node of query(['msup, msub, msubsup'], root).reverse()) {
+      const [base, ...scripts] = Array.from(node.children);
+      if (!base || scripts.length === 0) continue;
+      const marks = node.localName === 'msubsup' ? ['_', '^'] : [];
+      const fallback = node.localName === 'msub' ? '_' : '^';
+      const suffix = scripts
+        .map(
+          (part, index) =>
+            (marks[index] ?? fallback) + '{' + (part.textContent ?? '') + '}',
+        )
+        .join('');
+      node.replaceWith(document.createTextNode((base.textContent ?? '') + suffix));
+    }
+
+    for (const node of query(['sup, sub'], root).reverse()) {
+      const value = node.textContent?.trim() ?? '';
+      const mark = node.localName === 'sub' ? '_' : '^';
+      node.replaceWith(document.createTextNode(value ? mark + '{' + value + '}' : ''));
+    }
+  };
+
+  const textOf = (
+    node: Element | null | undefined,
+    limit = 40_000,
+    removeSelectors: string[] = [],
+  ): string => {
+    if (!node) return '';
+    const clone = node.cloneNode(true) as HTMLElement;
+    const sourceElements = [node, ...Array.from(node.querySelectorAll('*'))];
+    const cloneElements = [clone, ...Array.from(clone.querySelectorAll('*'))];
+    for (const [index, source] of sourceElements.entries()) {
+      // Foreign content such as MathML can make this throw; a statement full of
+      // math must not lose the whole extraction to one unstyleable node.
+      let style: CSSStyleDeclaration | undefined;
+      try {
+        style = getComputedStyle(source);
+      } catch {
+        continue;
+      }
+      const invisible =
+        style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        style.visibility === 'collapse' ||
+        style.opacity === '0' ||
+        style.fontSize === '0px';
+      if (invisible && index === 0) return '';
+      if (invisible && !isTexSource(source)) cloneElements[index]?.remove();
+    }
+    inlineMath(clone);
+    clone
+      .querySelectorAll(
+        '[hidden], [aria-hidden="true"], [style*="display: none"], [style*="display:none"], script, style, noscript',
+      )
+      .forEach((element) => element.remove());
+    for (const selector of removeSelectors) {
+      try {
+        if (clone.matches(selector)) return '';
+        clone.querySelectorAll(selector).forEach((element) => element.remove());
+      } catch {
+        // Ignore an invalid optional cleanup selector.
+      }
+    }
+    if (!clone.innerText) {
+      clone
+        .querySelectorAll(
+          'address, article, aside, blockquote, br, div, dl, fieldset, figcaption, figure, footer, form, h1, h2, h3, h4, h5, h6, header, hr, li, main, nav, ol, p, pre, section, table, tr, ul',
+        )
+        .forEach((element) => {
+          element.before(document.createTextNode('\n'));
+          element.after(document.createTextNode('\n'));
+        });
+    }
+    const raw = clone.innerText || clone.textContent || '';
+    return normalize(raw, limit);
+  };
+
+  const firstText = (
+    selectors: string[],
+    limit = 40_000,
+    removeSelectors: string[] = [],
+  ): string => textOf(query(selectors)[0], limit, removeSelectors);
+
+  const unique = (values: string[]): string[] =>
+    Array.from(new Set(values.map((value) => normalize(value, 5_000)))).filter(Boolean);
+
+  const sectionText = (selectors: string[]): string =>
+    firstText(selectors, 40_000, config.removeSelectors);
+
+  const allText = (selectors: string[], removeSelectors: string[] = []): string[] =>
+    query(selectors)
+      .map((node) => textOf(node, 20_000, removeSelectors))
+      .filter(Boolean);
+
+  const roots = query(config.statementSelectors);
+  const statement =
+    roots
+      .map((root) => textOf(root, 120_000, config.removeSelectors))
+      .filter(Boolean)
+      .join('\n\n') || textOf(document.body, 120_000, config.removeSelectors);
+
+  const sections: ProblemContext['sections'] = [];
+  for (const root of roots.slice(0, 3)) {
+    const headings = Array.from(root.querySelectorAll('h1, h2, h3, h4'));
+    for (const heading of headings.slice(0, 50)) {
+      const headingText = textOf(heading, 200);
+      if (!headingText) continue;
+
+      const bodies: string[] = [];
+      let sibling = heading.nextElementSibling;
+      while (sibling && !/^H[1-4]$/.test(sibling.tagName)) {
+        const value = textOf(sibling, 10_000, config.removeSelectors);
+        if (value) bodies.push(value);
+        sibling = sibling.nextElementSibling;
+      }
+
+      const body = normalize(bodies.join('\n\n'), 40_000);
+      if (body) sections.push({ heading: headingText, body });
+    }
+  }
+
+  const sectionByName = (pattern: RegExp): string | undefined =>
+    sections.find(({ heading }) => pattern.test(heading))?.body;
+
+  const input = sectionText(config.inputSelectors) || sectionByName(/\binput\b/i);
+  const output = sectionText(config.outputSelectors) || sectionByName(/\boutput\b/i);
+
+  const explicitConstraints = allText(
+    config.constraintsSelectors,
+    config.removeSelectors,
+  ).flatMap((text) => text.split('\n'));
+  const sectionConstraints = sections
+    .filter(({ heading }) => /constraint|limit/i.test(heading))
+    .flatMap(({ body }) => body.split('\n'));
+  const constraints = unique([...explicitConstraints, ...sectionConstraints]).slice(
+    0,
+    100,
+  );
+
+  let sampleInputs = allText(config.sampleInputSelectors);
+  let sampleOutputs = allText(config.sampleOutputSelectors);
+  let explanations = allText(config.explanationSelectors, config.removeSelectors);
+
+  if (sampleInputs.length === 0) {
+    sampleInputs = sections
+      .filter(({ heading }) => /^sample input\b/i.test(heading))
+      .map(({ body }) => body);
+  }
+  if (sampleOutputs.length === 0) {
+    sampleOutputs = sections
+      .filter(({ heading }) =>
+        /^(?:sample output|output for sample input)\b/i.test(heading),
+      )
+      .map(({ body }) => body);
+  }
+  if (explanations.length === 0) {
+    explanations = sections
+      .filter(({ heading }) => /^explanation\b/i.test(heading))
+      .map(({ body }) => body);
+  }
+
+  if (
+    config.site === 'generic' &&
+    sampleInputs.length === 0 &&
+    sampleOutputs.length === 0
+  ) {
+    const preformatted = roots
+      .flatMap((root) => Array.from(root.querySelectorAll('pre')))
+      .map((node) => textOf(node, 20_000))
+      .filter(Boolean);
+    if (preformatted.length >= 2 && preformatted.length % 2 === 0) {
+      sampleInputs = preformatted.filter((_, index) => index % 2 === 0);
+      sampleOutputs = preformatted.filter((_, index) => index % 2 === 1);
+    }
+  }
+
+  const sampleCount = Math.max(sampleInputs.length, sampleOutputs.length);
+  const samples = Array.from({ length: sampleCount }, (_, index) => {
+    const explanation = explanations[index] || explanations[0];
+    return {
+      input: sampleInputs[index] ?? '',
+      output: sampleOutputs[index] ?? '',
+      ...(explanation ? { explanation } : {}),
+    };
+  }).filter(({ input: sampleInput, output: sampleOutput }) =>
+    Boolean(sampleInput || sampleOutput),
+  );
+
+  const title =
+    firstText(config.titleSelectors, 500) ||
+    normalize(document.title.replace(/\s*[-|].*$/, ''), 500) ||
+    'Untitled problem';
+
+  const rawTags = unique(query(config.tagSelectors).map((node) => textOf(node, 100)));
+  const explicitRating = firstText(config.ratingSelectors, 100);
+  const ratingTag = rawTags.find((tag) => /^\*\d+$/.test(tag));
+  const rating = explicitRating || ratingTag;
+  const timeLimit = firstText(config.timeLimitSelectors, 200);
+  const memoryLimit = firstText(config.memoryLimitSelectors, 200);
+  const tags = rawTags
+    .filter((tag) => tag !== ratingTag)
+    .map((tag) => tag.replace(/^x\d+\s*/i, '').trim())
+    .filter(Boolean);
+
+  const lowerStatement = statement.toLowerCase();
+  const wordCount = statement.split(/\s+/).filter(Boolean).length;
+  const problemSignals = [
+    /\binputs?\b/,
+    /\boutputs?\b/,
+    /\bconstraint/,
+    /\bsamples?\b|\bexamples?\b/,
+    /\bprint\b|\bdetermine\b|\bcompute\b|\bgiven\b/,
+  ].filter((pattern) => pattern.test(lowerStatement)).length;
+
+  let confidence = config.baseConfidence;
+  if (title.length > 2) confidence += 0.01;
+  if (wordCount > 80) confidence += 0.03;
+  if (input || output) confidence += 0.03;
+  if (samples.length > 0) confidence += 0.02;
+  if (config.site === 'generic') {
+    confidence = Math.min(0.82, confidence + problemSignals * 0.08);
+    if (wordCount < 40) confidence -= 0.2;
+  }
+
+  const warnings: string[] = [];
+  if (wordCount < 80) warnings.push('The extracted statement is unusually short.');
+  if (!input && !output && config.site !== 'advent-of-code') {
+    warnings.push('Input and output sections were not identified separately.');
+  }
+  if (config.site === 'generic') {
+    warnings.push('This page used the generic problem extractor.');
+  }
+
+  return {
+    version: 1,
+    source: {
+      url: location.href,
+      host: location.host,
+      site: config.site,
+      extractedAt: Date.now(),
+    },
+    title,
+    statement,
+    ...(input ? { input } : {}),
+    ...(output ? { output } : {}),
+    constraints,
+    samples,
+    ...(timeLimit ? { timeLimit } : {}),
+    ...(memoryLimit ? { memoryLimit } : {}),
+    ...(rating ? { rating } : {}),
+    tags,
+    sections,
+    confidence: Math.max(0, Math.min(1, confidence)),
+    warnings,
+  };
+}

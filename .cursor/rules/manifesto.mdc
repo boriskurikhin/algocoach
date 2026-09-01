@@ -1,0 +1,17 @@
+---
+description: Preserve the product's coaching covenant, privacy, and minimal design
+alwaysApply: true
+---
+
+# Read the manifesto first
+
+Before changing this project, read `MANIFESTO.md` and `AGENTS.md`.
+
+The manifesto is a product requirement. Preserve productive struggle, the
+slow hint ladder, evidence-qualified learner memory, strict local-first
+privacy, minimal Chrome permissions, runtime validation, and the restrained
+typographic interface.
+
+Do not implement complete-solution delivery, answer-shaped pseudocode,
+automatic editor access, fixed learner labels, analytics, a hidden backend,
+or decorative dashboard UI.
