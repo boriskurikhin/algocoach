@@ -4,7 +4,7 @@ import { SOCRATIC_COACH_SYSTEM_PROMPT, buildCoachInput } from '../prompts/coach'
 import type { ExtensionSettings } from '../storage/local';
 import { DrawConceptSchema, type DrawConcept } from '../visualization/schema';
 import { requestModelResponse } from './openai-client';
-import type { CoachingSession } from './schemas';
+import { COACH_RESPONSE_MAX_OUTPUT_TOKENS, type CoachingSession } from './schemas';
 import type { SessionUsage } from './usage';
 
 const drawConceptTool = zodResponsesFunction({
@@ -37,7 +37,7 @@ export async function draftCoachResponse(
       tool_choice: 'auto',
       parallel_tool_calls: false,
       text: { verbosity: 'low' },
-      max_output_tokens: 12_000,
+      max_output_tokens: COACH_RESPONSE_MAX_OUTPUT_TOKENS,
     },
     {
       signal,

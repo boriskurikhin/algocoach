@@ -78,6 +78,10 @@ reasoning settings, and coaching inputs are unchanged, but responses may arrive
 more slowly. Stable per-session cache keys improve reuse of repeated prompt
 prefixes without removing coaching context.
 
+Hard problems get larger reasoning/output budgets: 64k tokens for the private
+analysis, 48k for a coaching draft, and 24k for the safety pass. Every streamed
+model step has a true 10-minute wall-clock deadline.
+
 ## Learner memory
 
 The local profile can estimate:

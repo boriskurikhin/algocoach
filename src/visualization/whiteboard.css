@@ -1,19 +1,19 @@
 .whiteboard {
-  --visual-primary: #c92552;
-  --visual-secondary: #326fa8;
-  --visual-line: #777771;
-  margin: 1.25rem 0;
-  padding: 1rem 0;
+  --visual-primary: var(--accent);
+  --visual-secondary: var(--ink-muted);
+  --visual-line: var(--border);
+  margin: var(--space-6) 0;
+  padding: var(--space-4) 0;
   border-block: 1px solid var(--border);
 }
 
 .whiteboard-heading {
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-3);
 }
 
 .whiteboard h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--text-base);
 }
 
 .whiteboard-canvas {
@@ -103,7 +103,7 @@
 }
 
 .visual-value.state-active {
-  fill: white;
+  fill: var(--paper);
   font-weight: 700;
 }
 
@@ -198,12 +198,12 @@
 
 .whiteboard-caption,
 .whiteboard-question {
-  margin: 0.65rem 0;
+  margin: var(--space-2) 0;
 }
 
 .whiteboard-caption {
   color: var(--ink-muted);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .whiteboard-question {
@@ -214,27 +214,27 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--space-1);
 }
 
 .whiteboard-controls button {
   min-height: auto;
-  padding: 0.3rem 0.55rem;
+  padding: var(--space-1) var(--space-2);
   color: var(--ink);
   background: transparent;
   border-color: var(--border);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
 }
 
 .whiteboard-controls button:hover:not(:disabled) {
-  color: var(--visual-primary);
+  color: var(--accent);
   background: var(--paper-muted);
 }
 
 .whiteboard-controls span {
   margin-left: auto;
   color: var(--ink-muted);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
 }
 
 @keyframes whiteboard-frame {
@@ -252,17 +252,5 @@
   .visual-cell,
   .visual-node {
     transition: none;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .whiteboard {
-    --visual-primary: #f06388;
-    --visual-secondary: #8dbcf0;
-    --visual-line: #8c8c85;
-  }
-
-  .visual-value.state-active {
-    fill: #1a1114;
   }
 }

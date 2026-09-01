@@ -5,7 +5,11 @@ import {
   buildProblemAnalysisInput,
 } from '../prompts/analyze';
 import type { ExtensionSettings } from '../storage/local';
-import { CoachingMapSchema, type CoachingMap } from './schemas';
+import {
+  CoachingMapSchema,
+  PROBLEM_ANALYSIS_MAX_OUTPUT_TOKENS,
+  type CoachingMap,
+} from './schemas';
 import { requestStructuredResponse } from './openai-client';
 import type { SessionUsage } from './usage';
 
@@ -25,11 +29,10 @@ export async function analyzeProblem(
     schema: CoachingMapSchema,
     schemaName: 'private_coaching_map',
     // This cap includes hidden reasoning tokens, not just the compact JSON map.
-    maxOutputTokens: 12_000,
+    maxOutputTokens: PROBLEM_ANALYSIS_MAX_OUTPUT_TOKENS,
     invalidResultMessage:
       'OpenAI returned an incomplete problem analysis. Try the request again.',
     signal,
-    reasoningMode: 'standard',
     onUsage,
   });
 }

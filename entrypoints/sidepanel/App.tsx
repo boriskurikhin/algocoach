@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import {
   COACH_PROCESSING_LABEL,
-  COACH_STEP_TIMEOUT_MS,
+  COACH_STEP_TIMEOUT_MINUTES,
   type ChatMessage,
   type CoachStage,
   type CoachStatus,
@@ -40,12 +40,37 @@ interface StatusState {
 
 type CoachPort = ReturnType<typeof browser.runtime.connect>;
 
-const statusDetail: Record<CoachStatus, string> = {
-  studying: 'Building a private coaching map with OpenAI',
-  coaching: 'Drafting one focused question with OpenAI',
-  checking: 'Running a separate hint-safety check with OpenAI',
-  'saving-profile': 'Saving useful learning signals locally',
+const STATUS_PROGRESS_INTERVAL_MS = 4_000;
+const statusProgress: Record<CoachStatus, readonly string[]> = {
+  studying: [
+    'Reading the statement and constraints…',
+    'Separating the core model from edge cases…',
+    'Building a private ladder of safe questions…',
+    'Still studying—hard problems can take a little longer.',
+  ],
+  coaching: [
+    'Reading your latest reasoning…',
+    'Looking for the smallest useful mismatch…',
+    'Choosing one question that keeps the work with you…',
+    'Still drafting one careful coaching move.',
+  ],
+  checking: [
+    'Checking against the private answer boundary…',
+    'Making sure the hint advances only one step…',
+    'Removing anything too revealing or overloaded…',
+    'Still checking before anything reaches you.',
+  ],
+  'saving-profile': ['Saving only evidence from what you demonstrated…'],
 };
+
+function statusProgressMessage(status: StatusState, now: number): string {
+  const messages = statusProgress[status.kind];
+  const index = Math.min(
+    Math.floor(Math.max(0, now - status.startedAt) / STATUS_PROGRESS_INTERVAL_MS),
+    messages.length - 1,
+  );
+  return messages[index] ?? messages[0] ?? 'Working…';
+}
 
 function elapsedTime(startedAt: number, now: number): string {
   const seconds = Math.max(0, Math.floor((now - startedAt) / 1_000));
@@ -620,18 +645,20 @@ export default function App() {
           <span className="status-dot" aria-hidden="true" />
           <span className="status-copy">
             <strong>{status.label}</strong>
+            <span className="status-progress">
+              {statusProgressMessage(status, statusClock)}
+            </span>
             <span className="status-detail" aria-hidden="true">
-              {statusDetail[status.kind]}
               {status.kind === 'saving-profile'
-                ? ''
-                : ` · ${COACH_PROCESSING_LABEL} · ${
+                ? 'Local only'
+                : `OpenAI · ${COACH_PROCESSING_LABEL} · ${
                     settings?.reasoningEffort ?? 'high'
                   } reasoning`}
               {' · '}
               {elapsedTime(status.startedAt, statusClock)} elapsed
               {status.kind === 'saving-profile'
                 ? ''
-                : ` · ${COACH_STEP_TIMEOUT_MS / 1_000}s limit`}
+                : ` · ${COACH_STEP_TIMEOUT_MINUTES}m limit`}
             </span>
           </span>
         </p>

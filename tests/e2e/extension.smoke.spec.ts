@@ -114,7 +114,7 @@ test('loads the packaged settings and side-panel surfaces', async () => {
     await expect(sidePanel.getByText(/I’ve read “Delayed test problem.”/)).toBeVisible({
       timeout: 40_000,
     });
-    await expect(sidePanel.getByText(/1\.3K tokens · ≈\$0\.020/)).toBeVisible();
+    await expect(sidePanel.getByText(/1\.3K tokens · ≈\$0\.010/)).toBeVisible();
   } finally {
     await context?.close();
   }

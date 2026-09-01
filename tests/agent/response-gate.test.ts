@@ -82,7 +82,7 @@ describe('response gate', () => {
     expect(request.prompt_cache_key).toBe('socratic-coach:guard:session-1');
     expect(request.prompt_cache_options).toEqual({ mode: 'implicit', ttl: '30m' });
     expect(request.text.verbosity).toBe('low');
-    expect(request.max_output_tokens).toBe(12_000);
+    expect(request.max_output_tokens).toBe(24_000);
   });
 
   it('does not silently regress the hint stage', async () => {

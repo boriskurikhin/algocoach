@@ -244,26 +244,38 @@ describe('side panel coaching flow', () => {
   });
 
   it('shows timed model progress and the reason a request stopped', async () => {
-    render(<App />);
+    const view = render(<App />);
 
     expect(await screen.findByText('Batch Sums')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Start coaching' }));
-    expect(
-      screen.getByText(
-        /Building a private coaching map with OpenAI.*Standard.*high reasoning.*90s limit/,
-      ),
-    ).toBeInTheDocument();
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Start coaching' }));
+      expect(
+        screen.getByText('Reading the statement and constraints…'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/OpenAI.*Standard.*high reasoning.*10m limit/),
+      ).toBeInTheDocument();
 
-    act(() => {
-      emit({
-        type: 'coach:error',
-        message:
-          'OpenAI used the entire reasoning budget before finishing. Try the request again.',
+      act(() => vi.advanceTimersByTime(4_000));
+      expect(
+        screen.getByText('Separating the core model from edge cases…'),
+      ).toBeInTheDocument();
+
+      act(() => {
+        emit({
+          type: 'coach:error',
+          message:
+            'OpenAI reached this step’s reasoning/output budget before finishing. Try again.',
+        });
       });
-    });
 
-    expect(screen.getByRole('alert')).toHaveTextContent('reasoning budget');
-    expect(screen.queryByText(/90s limit/)).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('reasoning/output budget');
+      expect(screen.queryByText(/10m limit/)).not.toBeInTheDocument();
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the worker session alive while a model request is pending', async () => {

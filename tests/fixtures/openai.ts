@@ -32,9 +32,18 @@ export async function stubOpenAI(
   class StubbedOpenAI extends actual.default {
     override responses = {
       stream: (body: unknown, options: unknown) => {
+        let rejectAbort: ((error: Error) => void) | undefined;
+        const aborted = new Promise<never>((_resolve, reject) => {
+          rejectAbort = reject;
+        });
         const responseStream = {
           on: () => responseStream,
-          finalResponse: () => mocks.parse(body, options),
+          finalResponse: () =>
+            Promise.race([
+              Promise.resolve().then(() => mocks.parse(body, options)),
+              aborted,
+            ]),
+          abort: () => rejectAbort?.(new actual.default.APIUserAbortError()),
         };
         return responseStream;
       },

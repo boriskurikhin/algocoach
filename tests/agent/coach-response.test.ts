@@ -52,7 +52,7 @@ describe('coach response drafting', () => {
         store: false,
         parallel_tool_calls: false,
         text: { verbosity: 'low' },
-        max_output_tokens: 12_000,
+        max_output_tokens: 48_000,
       }),
     );
   });

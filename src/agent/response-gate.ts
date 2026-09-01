@@ -6,6 +6,7 @@ import { isFocusedVisualization, type DrawConcept } from '../visualization/schem
 import { requestStructuredResponse } from './openai-client';
 import {
   GuardResultSchema,
+  RESPONSE_GUARD_MAX_OUTPUT_TOKENS,
   type CoachStage,
   type CoachingMap,
   type GuardResult,
@@ -77,7 +78,7 @@ export async function guardCoachResponse(input: {
     prompt: buildGuardInput(input),
     schema: GuardResultSchema,
     schemaName: 'guarded_coach_response',
-    maxOutputTokens: 12_000,
+    maxOutputTokens: RESPONSE_GUARD_MAX_OUTPUT_TOKENS,
     invalidResultMessage:
       'OpenAI returned an incomplete hint-safety check. Try the request again.',
     signal: input.signal,
