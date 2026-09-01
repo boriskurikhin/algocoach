@@ -494,14 +494,7 @@ export default function App() {
     <main className="panel-shell">
       <header className="panel-header">
         <div className="brand-lockup">
-          <img
-            className="brand-mark"
-            src="/mascot/icon.png"
-            alt=""
-            width="48"
-            height="48"
-            aria-hidden="true"
-          />
+          <CoachMascot state={mascotState} />
           <div>
             <p className="eyebrow">Socratic</p>
             <h1>Algo Coach</h1>
@@ -527,7 +520,7 @@ export default function App() {
       ) : null}
 
       {!sessionId ? (
-        <section className="problem-section" aria-labelledby="problem-title">
+        <section aria-labelledby="problem-title">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Current page</p>
@@ -544,7 +537,6 @@ export default function App() {
               Read again
             </button>
           </div>
-          <CoachMascot state={mascotState} />
 
           {needsAccess ? (
             <section className="notice">
@@ -648,7 +640,6 @@ export default function App() {
                 </p>
               ) : null}
             </div>
-            <CoachMascot state={mascotState} />
             <button
               className="link-button"
               type="button"

@@ -15,8 +15,13 @@
 }
 
 .panel-header {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  align-items: center;
   margin-bottom: var(--space-6);
-  padding-bottom: var(--space-3);
+  padding: var(--space-2) 0 var(--space-3);
+  background: var(--paper);
   border-bottom: 1px solid var(--border);
 }
 
@@ -27,13 +32,7 @@
 .brand-lockup {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-}
-
-.brand-mark {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
+  gap: var(--space-2);
 }
 
 .notice {
@@ -47,10 +46,6 @@
 .problem-meta {
   color: var(--ink-muted);
   font-size: var(--text-xs);
-}
-
-.problem-section {
-  position: relative;
 }
 
 .problem-preview {
@@ -76,9 +71,6 @@
 }
 
 .session-heading {
-  position: sticky;
-  z-index: 3;
-  top: 0;
   align-items: center;
   padding: var(--space-3) 0;
   background: var(--paper);
@@ -88,7 +80,6 @@
 .session-summary {
   flex: 1;
   min-width: 0;
-  padding-right: 4rem;
 }
 
 .session-heading h2 {
@@ -107,23 +98,12 @@
 }
 
 .coach-mascot {
-  position: absolute;
-  z-index: 4;
-  width: 4rem;
-  margin: 0;
+  flex: 0 0 auto;
+  width: 3.5rem;
+  margin: calc(var(--space-1) * -1) 0;
   color: var(--ink-muted);
   pointer-events: none;
   text-align: center;
-}
-
-.problem-section > .coach-mascot {
-  top: 0;
-  right: 4.25rem;
-}
-
-.session-heading > .coach-mascot {
-  top: 0;
-  right: 6.5rem;
 }
 
 .coach-mascot img {
@@ -301,7 +281,7 @@ footer {
   }
 
   .coach-mascot {
-    width: 3.5rem;
+    width: 3rem;
   }
 }
 
