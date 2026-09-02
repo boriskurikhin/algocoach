@@ -137,6 +137,13 @@ test('loads the packaged settings and side-panel surfaces', async () => {
         ),
       )
       .toBe(0);
+    await expect
+      .poll(() =>
+        sessionSurface.evaluate(
+          (element) => getComputedStyle(element).boxShadow !== 'none',
+        ),
+      )
+      .toBe(true);
 
     await sidePanel.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await expect
@@ -149,6 +156,8 @@ test('loads the packaged settings and side-panel surfaces', async () => {
         ),
       )
       .toBeGreaterThan(0);
+    await expect(brandHeader).toHaveCSS('border-bottom-color', 'rgba(0, 0, 0, 0)');
+    await expect(sessionSurface).toHaveCSS('box-shadow', 'none');
     await expect(
       sessionHeader.getByRole('heading', { name: 'Delayed test problem' }),
     ).toBeVisible();

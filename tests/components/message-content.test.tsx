@@ -19,6 +19,39 @@ describe('message code snippets', () => {
     expect(container.textContent).toContain('What changed?');
   });
 
+  it('renders single-backtick spans as inline code', () => {
+    const { container } = render(
+      <MessageContent
+        content={'For `N=5`, source `j=3` can use intervals `[1,3]` and `[0,4]`.'}
+      />,
+    );
+
+    expect(
+      Array.from(container.querySelectorAll('code.inline-code')).map(
+        (node) => node.textContent,
+      ),
+    ).toEqual(['N=5', 'j=3', '[1,3]', '[0,4]']);
+    expect(container.textContent).not.toContain('`');
+  });
+
+  it('does not typeset dollar signs inside inline code', () => {
+    const { container } = render(
+      <MessageContent content={'Keep `$10` literal, but typeset $n^2$.'} />,
+    );
+
+    expect(container.querySelector('code.inline-code')).toHaveTextContent('$10');
+    expect(container.querySelectorAll('.katex')).toHaveLength(1);
+  });
+
+  it('leaves unmatched backticks as ordinary text', () => {
+    const { container } = render(
+      <MessageContent content={'What does the unfinished `marker mean?'} />,
+    );
+
+    expect(container.querySelector('code.inline-code')).toBeNull();
+    expect(container.textContent).toContain('`marker');
+  });
+
   it('renders local syntax tokens and keeps markup inert', () => {
     const { container } = render(
       <MessageContent

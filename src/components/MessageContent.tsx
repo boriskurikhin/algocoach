@@ -19,6 +19,9 @@ interface MessageContentProps {
 type MessagePart =
   { type: 'text'; value: string } | { type: 'code'; value: string; language: string };
 
+type InlinePart =
+  { type: 'text'; value: string } | { type: 'inline-code'; value: string };
+
 const aliases: Record<string, string> = {
   'c++': 'cpp',
   cc: 'cpp',
@@ -50,6 +53,26 @@ function parseMessage(content: string): MessagePart[] {
         : rawLanguage,
       value: (match[2] ?? '').replace(/\n$/, ''),
     });
+    cursor = index + match[0].length;
+  }
+
+  if (cursor < content.length) {
+    parts.push({ type: 'text', value: content.slice(cursor) });
+  }
+  return parts.length ? parts : [{ type: 'text', value: content }];
+}
+
+function parseInlineCode(content: string): InlinePart[] {
+  const parts: InlinePart[] = [];
+  const spans = /(?<![\\`])`([^`\n]+)`(?!`)/g;
+  let cursor = 0;
+
+  for (const match of content.matchAll(spans)) {
+    const index = match.index;
+    if (index > cursor) {
+      parts.push({ type: 'text', value: content.slice(cursor, index) });
+    }
+    parts.push({ type: 'inline-code', value: match[1] ?? '' });
     cursor = index + match[0].length;
   }
 
@@ -95,6 +118,22 @@ function CodeSnippet({ value, language }: { value: string; language: string }) {
   );
 }
 
+function Prose({ value, partIndex }: { value: string; partIndex: number }) {
+  return parseInlineCode(value).map((part, index) =>
+    part.type === 'inline-code' ? (
+      <code className="inline-code" key={`inline-code-${partIndex}-${index}`}>
+        {part.value}
+      </code>
+    ) : (
+      <MathText
+        className="message-prose"
+        key={`prose-${partIndex}-${index}`}
+        value={part.value}
+      />
+    ),
+  );
+}
+
 export function MessageContent({ content }: MessageContentProps) {
   return (
     <div className="message-content">
@@ -106,11 +145,7 @@ export function MessageContent({ content }: MessageContentProps) {
             language={part.language}
           />
         ) : (
-          <MathText
-            className="message-prose"
-            key={`text-${index}`}
-            value={part.value}
-          />
+          <Prose key={`text-${index}`} partIndex={index} value={part.value} />
         ),
       )}
     </div>

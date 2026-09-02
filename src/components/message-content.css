@@ -2,6 +2,16 @@
   white-space: pre-wrap;
 }
 
+.inline-code {
+  padding: 0.08em 0.28em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+  background: var(--paper-muted);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
 /* KaTeX ships at 1.21em, which reads as ornament next to body copy. */
 .katex {
   font-size: 1em;

@@ -30,6 +30,7 @@
 
 .panel-shell-session .panel-header {
   margin-bottom: 0;
+  border-bottom-color: transparent;
 }
 
 .panel-header h1 {
@@ -137,6 +138,7 @@
     var(--paper) var(--coach-mascot-lane)
   );
   border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 1px var(--border);
   transition: padding-left 140ms ease-out;
 }
 
@@ -187,6 +189,7 @@
         transparent 0 var(--coach-mascot-lane),
         var(--paper) var(--coach-mascot-lane)
       );
+      box-shadow: none;
     }
   }
 }
