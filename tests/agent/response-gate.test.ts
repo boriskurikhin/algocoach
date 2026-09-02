@@ -30,6 +30,7 @@ describe('response gate', () => {
         violations: ['none'],
         safeReply: 'What should remain true after one batch?',
         nextStage: 'connect',
+        solutionStatus: 'in-progress',
         allowVisualization: true,
         profileObservations: [],
       },
@@ -71,6 +72,7 @@ describe('response gate', () => {
       coachingMap: coachingMapFixture,
       learner: learnerSnapshotFixture,
       problemKey: 'problem',
+      conversation: [],
       settings,
     });
 
@@ -92,6 +94,7 @@ describe('response gate', () => {
         violations: ['none'],
         safeReply: 'What boundary case challenges that invariant?',
         nextStage: 'listen',
+        solutionStatus: 'in-progress',
         allowVisualization: false,
         profileObservations: [],
       },
@@ -105,6 +108,7 @@ describe('response gate', () => {
       coachingMap: coachingMapFixture,
       learner: learnerSnapshotFixture,
       problemKey: 'problem',
+      conversation: [],
       settings,
     });
 
@@ -118,6 +122,7 @@ describe('response gate', () => {
         violations: ['answer-revealing-visualization'],
         safeReply: 'Can you trace one edge before drawing the whole graph?',
         nextStage: 'clarify',
+        solutionStatus: 'in-progress',
         allowVisualization: true,
         profileObservations: [],
       },
@@ -132,6 +137,7 @@ describe('response gate', () => {
       coachingMap: coachingMapFixture,
       learner: learnerSnapshotFixture,
       problemKey: 'problem',
+      conversation: [],
       settings,
     });
 
@@ -151,11 +157,87 @@ describe('response gate', () => {
       coachingMap: coachingMapFixture,
       learner: learnerSnapshotFixture,
       problemKey: 'problem',
+      conversation: [],
       settings,
     });
 
     expect(guarded.allowed).toBe(true);
     expect(guarded.allowVisualization).toBe(false);
+  });
+
+  it('ends the session when learner evidence demonstrates the optimal solution', async () => {
+    mocks.parse.mockResolvedValueOnce({
+      output_parsed: {
+        allowed: true,
+        violations: ['none'],
+        safeReply: 'That approach is correct. Want to discuss implementation?',
+        nextStage: 'complete',
+        solutionStatus: 'optimal',
+        allowVisualization: true,
+        profileObservations: [],
+      },
+    });
+    const conversation = [
+      {
+        id: 'learner-solution',
+        role: 'user' as const,
+        content:
+          'I will preserve surplus while expanding each unmet demand, so every conversion is processed once in linear time.',
+        createdAt: 1,
+      },
+    ];
+
+    const guarded = await guardCoachResponse({
+      sessionId: 'session-1',
+      stage: 'listen',
+      latestLearnerMessage: conversation[0]!.content,
+      candidateReply: 'That approach is correct. Want to discuss implementation?',
+      visualization: sceneFixture,
+      coachingMap: coachingMapFixture,
+      learner: learnerSnapshotFixture,
+      problemKey: 'problem',
+      conversation,
+      settings,
+    });
+
+    expect(guarded.solutionStatus).toBe('optimal');
+    expect(guarded.nextStage).toBe('complete');
+    expect(guarded.safeReply).toMatch(/arrived at an optimal solution/i);
+    expect(guarded.safeReply).toMatch(/session is complete/i);
+    expect(guarded.safeReply).not.toContain('?');
+    expect(guarded.allowVisualization).toBe(false);
+    expect(mocks.parse.mock.calls[0]?.[0].input).toContain(
+      'UNTRUSTED_CONVERSATION_EVIDENCE_START',
+    );
+  });
+
+  it('does not complete from an ungrounded next-stage request', async () => {
+    mocks.parse.mockResolvedValueOnce({
+      output_parsed: {
+        allowed: true,
+        violations: ['none'],
+        safeReply: 'What invariant makes that loop safe?',
+        nextStage: 'complete',
+        solutionStatus: 'in-progress',
+        allowVisualization: false,
+        profileObservations: [],
+      },
+    });
+
+    const guarded = await guardCoachResponse({
+      sessionId: 'session-1',
+      stage: 'clarify',
+      latestLearnerMessage: 'I think I solved it.',
+      candidateReply: 'What invariant makes that loop safe?',
+      coachingMap: coachingMapFixture,
+      learner: learnerSnapshotFixture,
+      problemKey: 'problem',
+      conversation: [],
+      settings,
+    });
+
+    expect(guarded.solutionStatus).toBe('in-progress');
+    expect(guarded.nextStage).toBe('clarify');
   });
 
   it('fails closed if a rewritten reply still contains a solution leak', async () => {
@@ -168,6 +250,7 @@ describe('response gate', () => {
           'def solve():\n    return 1\n'.repeat(10) +
           '```',
         nextStage: 'connect',
+        solutionStatus: 'in-progress',
         allowVisualization: true,
         profileObservations: [],
       },
@@ -182,6 +265,7 @@ describe('response gate', () => {
       coachingMap: coachingMapFixture,
       learner: learnerSnapshotFixture,
       problemKey: 'problem',
+      conversation: [],
       settings,
     });
 

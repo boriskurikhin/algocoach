@@ -27,6 +27,9 @@ interface CoachingHooks {
 
 const newId = (): string => crypto.randomUUID();
 
+const roundedCodeforcesRating = (rating: number): number =>
+  Math.min(4_000, Math.max(800, Math.round(rating / 100) * 100));
+
 export async function startCoachingSession(
   input: CoachingHooks & { problem: ProblemContext },
 ): Promise<CoachingSession> {
@@ -40,7 +43,7 @@ export async function startCoachingSession(
     input.problem.title,
     ...input.problem.tags,
   ]);
-  const coachingMap = await analyzeProblem(
+  const analysis = await analyzeProblem(
     input.problem,
     learnerSnapshot,
     input.settings,
@@ -48,20 +51,34 @@ export async function startCoachingSession(
     input.signal,
     recordUsage,
   );
+  const coachingMap = analysis.coachingMap;
+  const officialRating =
+    input.problem.codeforcesRating?.source === 'official'
+      ? input.problem.codeforcesRating
+      : null;
+  const problem: ProblemContext = {
+    ...input.problem,
+    codeforcesRating:
+      officialRating ??
+      ({
+        value: roundedCodeforcesRating(analysis.estimatedCodeforcesRating),
+        source: 'estimated',
+      } as const),
+  };
   const now = Date.now();
   const opening = ChatMessageSchema.parse({
     id: newId(),
     role: 'assistant',
     content:
-      `I’ve read “${input.problem.title}.” Let’s start with your model of the ` +
+      `I’ve read “${problem.title}.” Let’s start with your model of the ` +
       'problem: what happens in the smallest example you can trace?',
     createdAt: now,
   });
   const session = CoachingSessionSchema.parse({
     version: 1,
     id: newId(),
-    problemKey: input.problem.source.url,
-    problem: input.problem,
+    problemKey: problem.source.url,
+    problem,
     coachingMap,
     stage: 'listen',
     messages: [opening],
@@ -78,6 +95,11 @@ export async function respondToLearner(
   const existing = await getSession(input.sessionId);
   if (!existing) {
     throw new Error('This coaching session expired. Start it again.');
+  }
+  if (existing.stage === 'complete') {
+    throw new Error(
+      'This coaching session is complete. Choose another problem to keep practicing.',
+    );
   }
 
   const userMessage = ChatMessageSchema.parse({
@@ -127,6 +149,7 @@ export async function respondToLearner(
       coachingMap: withUser.coachingMap,
       learner: learnerSnapshot,
       problemKey: withUser.problemKey,
+      conversation: withUser.messages,
       settings: input.settings,
       onActivity: input.onModelActivity,
       signal: input.signal,

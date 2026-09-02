@@ -116,6 +116,44 @@ function usageDetail(usage: SessionUsage): string {
   ].join(' · ');
 }
 
+const codeforcesRanks = [
+  { minimum: 3_000, name: 'Legendary Grandmaster', tone: 'legendary-grandmaster' },
+  { minimum: 2_600, name: 'International Grandmaster', tone: 'grandmaster' },
+  { minimum: 2_400, name: 'Grandmaster', tone: 'grandmaster' },
+  { minimum: 2_300, name: 'International Master', tone: 'master' },
+  { minimum: 2_100, name: 'Master', tone: 'master' },
+  { minimum: 1_900, name: 'Candidate Master', tone: 'candidate-master' },
+  { minimum: 1_600, name: 'Expert', tone: 'expert' },
+  { minimum: 1_400, name: 'Specialist', tone: 'specialist' },
+  { minimum: 1_200, name: 'Pupil', tone: 'pupil' },
+  { minimum: 800, name: 'Newbie', tone: 'newbie' },
+] as const;
+
+function CodeforcesRating({
+  rating,
+}: {
+  rating: NonNullable<ProblemContext['codeforcesRating']>;
+}) {
+  const rank =
+    codeforcesRanks.find(({ minimum }) => rating.value >= minimum) ??
+    codeforcesRanks.at(-1)!;
+  const estimated = rating.source === 'estimated';
+  const sourceLabel = estimated
+    ? 'Estimated Codeforces-equivalent rating'
+    : 'Official Codeforces rating';
+
+  return (
+    <span
+      className={`cf-rating cf-rating-${rank.tone}`}
+      title={`${sourceLabel} · ${rank.name}`}
+      aria-label={`${sourceLabel} ${rating.value}, ${rank.name}`}
+    >
+      CF {estimated ? '≈' : ''}
+      {rating.value}
+    </span>
+  );
+}
+
 export default function App() {
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [extraction, setExtraction] = useState<ActiveProblemResult | null>(null);
@@ -445,7 +483,7 @@ export default function App() {
 
   const submit = () => {
     const content = composer.trim();
-    if (!content || !sessionId || status) return;
+    if (!content || !sessionId || status || stage === 'complete') return;
     const now = Date.now();
     setError('');
     setMessages((value) => [...value, localMessage(content)]);
@@ -484,6 +522,8 @@ export default function App() {
   };
 
   const problem = extraction?.context;
+  const codeforcesRating = problem?.codeforcesRating;
+  const sessionComplete = stage === 'complete';
   const sessionUsageDetail = usage.modelCalls ? usageDetail(usage) : '';
   const mascotState = deriveCoachMascotState({
     sessionId,
@@ -560,8 +600,15 @@ export default function App() {
           {problem ? (
             <>
               <p className="problem-meta">
-                {problem.source.site} · {Math.round(problem.confidence * 100)}%
-                extraction confidence
+                {problem.source.site}
+                {codeforcesRating ? (
+                  <>
+                    {' · '}
+                    <CodeforcesRating rating={codeforcesRating} />
+                  </>
+                ) : null}
+                {' · '}
+                {Math.round(problem.confidence * 100)}% extraction confidence
               </p>
               <p className="problem-preview">
                 <MathText
@@ -634,7 +681,15 @@ export default function App() {
         <>
           <section className="session-heading">
             <div className="session-summary">
-              <p className="eyebrow">Hint stage: {stage}</p>
+              <p className="eyebrow">
+                {sessionComplete ? 'Solved' : `Hint stage: ${stage}`}
+                {codeforcesRating ? (
+                  <>
+                    {' · '}
+                    <CodeforcesRating rating={codeforcesRating} />
+                  </>
+                ) : null}
+              </p>
               <h2>{problem?.title || 'Coaching session'}</h2>
               {usage.modelCalls ? (
                 <p
@@ -677,35 +732,47 @@ export default function App() {
             ) : null}
           </section>
 
-          <form
-            className="composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submit();
-            }}
-          >
-            <label htmlFor="coach-message">What are you thinking?</label>
-            <textarea
-              id="coach-message"
-              value={composer}
-              onChange={(event) => setComposer(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                  event.preventDefault();
-                  submit();
-                }
-              }}
-              rows={6}
-              placeholder="Explain your model, paste code, or describe where it breaks…"
-              disabled={Boolean(status)}
-            />
-            <div className="composer-actions">
-              <span className="quiet">⌘/Ctrl + Enter</span>
-              <button type="submit" disabled={!composer.trim() || Boolean(status)}>
-                Ask the coach
+          {sessionComplete ? (
+            <section className="session-complete" role="status">
+              <p>
+                <strong>Optimal solution reached.</strong> The coach has closed this
+                session.
+              </p>
+              <button type="button" onClick={() => void changeProblem()}>
+                Choose another problem
               </button>
-            </div>
-          </form>
+            </section>
+          ) : (
+            <form
+              className="composer"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submit();
+              }}
+            >
+              <label htmlFor="coach-message">What are you thinking?</label>
+              <textarea
+                id="coach-message"
+                value={composer}
+                onChange={(event) => setComposer(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    submit();
+                  }
+                }}
+                rows={6}
+                placeholder="Explain your model, paste code, or describe where it breaks…"
+                disabled={Boolean(status)}
+              />
+              <div className="composer-actions">
+                <span className="quiet">⌘/Ctrl + Enter</span>
+                <button type="submit" disabled={!composer.trim() || Boolean(status)}>
+                  Ask the coach
+                </button>
+              </div>
+            </form>
+          )}
         </>
       )}
 

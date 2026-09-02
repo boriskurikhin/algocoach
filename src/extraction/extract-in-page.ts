@@ -509,6 +509,14 @@ export function extractProblemFromDocument(
     embeddedLeetCode?.difficulty || firstText(config.ratingSelectors, 100);
   const ratingTag = rawTags.find((tag) => /^\*\d+$/.test(tag));
   const rating = explicitRating || ratingTag;
+  const parsedCodeforcesRating =
+    config.site === 'codeforces' ? Number(rating?.match(/\d{3,4}/)?.[0]) : NaN;
+  const officialCodeforcesRating =
+    Number.isInteger(parsedCodeforcesRating) &&
+    parsedCodeforcesRating >= 800 &&
+    parsedCodeforcesRating <= 4_000
+      ? parsedCodeforcesRating
+      : null;
   const timeLimit = firstText(config.timeLimitSelectors, 200);
   const memoryLimit = firstText(config.memoryLimitSelectors, 200);
   const tags = rawTags
@@ -577,6 +585,14 @@ export function extractProblemFromDocument(
     ...(timeLimit ? { timeLimit } : {}),
     ...(memoryLimit ? { memoryLimit } : {}),
     ...(rating ? { rating } : {}),
+    ...(officialCodeforcesRating
+      ? {
+          codeforcesRating: {
+            value: officialCodeforcesRating,
+            source: 'official' as const,
+          },
+        }
+      : {}),
     tags,
     sections,
     confidence: Math.max(0, Math.min(1, confidence)),

@@ -1,4 +1,7 @@
 .panel-shell {
+  --coach-mascot-size: 3.5rem;
+  --coach-mascot-lane: calc(var(--coach-mascot-size) + var(--space-2));
+
   width: min(100%, 42rem);
   min-height: 100vh;
   margin: 0 auto;
@@ -31,8 +34,14 @@
 
 .brand-lockup {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
+}
+
+.panel-header > .link-button {
+  flex: 0 0 auto;
 }
 
 .notice {
@@ -46,6 +55,43 @@
 .problem-meta {
   color: var(--ink-muted);
   font-size: var(--text-xs);
+}
+
+.cf-rating {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cf-rating-newbie {
+  color: #66665f;
+}
+
+.cf-rating-pupil {
+  color: #087b19;
+}
+
+.cf-rating-specialist {
+  color: #007f78;
+}
+
+.cf-rating-expert {
+  color: #164da8;
+}
+
+.cf-rating-candidate-master {
+  color: #962b96;
+}
+
+.cf-rating-master {
+  color: #a34d00;
+}
+
+.cf-rating-grandmaster {
+  color: #b51f25;
+}
+
+.cf-rating-legendary-grandmaster {
+  color: #7d1318;
 }
 
 .problem-preview {
@@ -71,9 +117,17 @@
 }
 
 .session-heading {
+  position: sticky;
+  z-index: 6;
+  top: 0;
   align-items: center;
-  padding: var(--space-3) 0;
-  background: var(--paper);
+  min-height: calc(var(--coach-mascot-size) + var(--space-3));
+  padding: var(--space-3) 0 var(--space-3) var(--coach-mascot-lane);
+  background: linear-gradient(
+    to right,
+    transparent 0 var(--coach-mascot-lane),
+    var(--paper) var(--coach-mascot-lane)
+  );
   border-bottom: 1px solid var(--border);
 }
 
@@ -99,7 +153,7 @@
 
 .coach-mascot {
   flex: 0 0 auto;
-  width: 3.5rem;
+  width: var(--coach-mascot-size);
   margin: calc(var(--space-1) * -1) 0;
   color: var(--ink-muted);
   pointer-events: none;
@@ -178,6 +232,15 @@
   margin-top: 0;
   padding: var(--space-4) 0 var(--space-3);
   background: var(--paper);
+}
+
+.session-complete {
+  padding: var(--space-4) 0 var(--space-3);
+}
+
+.session-complete p {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-serif);
 }
 
 .composer label {
@@ -289,12 +352,46 @@ footer {
 }
 
 @media (max-width: 28rem) {
+  .panel-shell {
+    --coach-mascot-size: 3rem;
+  }
+
   .session-heading {
     gap: var(--space-2);
   }
+}
 
-  .coach-mascot {
-    width: 3rem;
+@media (prefers-color-scheme: dark) {
+  .cf-rating-newbie {
+    color: #b8b8b0;
+  }
+
+  .cf-rating-pupil {
+    color: #8bd68b;
+  }
+
+  .cf-rating-specialist {
+    color: #62d0c9;
+  }
+
+  .cf-rating-expert {
+    color: #8bb2ff;
+  }
+
+  .cf-rating-candidate-master {
+    color: #df8adf;
+  }
+
+  .cf-rating-master {
+    color: #f3a65a;
+  }
+
+  .cf-rating-grandmaster {
+    color: #ff7b7f;
+  }
+
+  .cf-rating-legendary-grandmaster {
+    color: #ff5555;
   }
 }
 

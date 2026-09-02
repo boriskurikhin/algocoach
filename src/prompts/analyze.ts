@@ -18,6 +18,13 @@ solutionFamilies entry. The map is private. Do not address the learner. Do not
 include executable code. Do not produce hidden chain-of-thought; provide only
 concise conclusions needed for coaching.
 
+Also assign a Codeforces-equivalent difficulty from 800 to 4000, rounded to the
+nearest 100. Judge the insight, proof, implementation burden, and constraints;
+do not inflate the rating merely because the setting is unfamiliar. If
+officialCodeforcesRating is present in the supplied metadata, use that exact
+value instead of estimating. A siteDifficulty value from another judge is not
+an official Codeforces rating.
+
 Every hint-ladder entry must remain less revealing than the solution itself.
 Begin with statement/model checks and tiny examples. Later entries may name a
 boundary or connect knowledge already demonstrated by the learner, but must
@@ -38,6 +45,6 @@ export function buildProblemAnalysisInput(
   return [
     delimited('UNTRUSTED_PROBLEM_DATA', problemForPrompt(problem)),
     delimited('UNCERTAIN_LEARNER_SNAPSHOT', learner),
-    'Return the private coaching map in the required schema.',
+    'Return the private coaching map and Codeforces-equivalent rating in the required schema.',
   ].join('\n');
 }

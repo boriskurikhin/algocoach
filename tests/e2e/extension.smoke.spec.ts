@@ -1,6 +1,6 @@
 import { expect, test, chromium, type BrowserContext } from '@playwright/test';
 import path from 'node:path';
-import { coachingMapFixture } from '../fixtures/domain';
+import { problemAnalysisFixture } from '../fixtures/domain';
 
 test('loads the packaged settings and side-panel surfaces', async () => {
   test.setTimeout(70_000);
@@ -74,7 +74,7 @@ test('loads the packaged settings and side-panel surfaces', async () => {
             content: [
               {
                 type: 'output_text',
-                text: JSON.stringify(coachingMapFixture),
+                text: JSON.stringify(problemAnalysisFixture),
                 annotations: [],
               },
             ],
@@ -115,6 +115,65 @@ test('loads the packaged settings and side-panel surfaces', async () => {
       timeout: 40_000,
     });
     await expect(sidePanel.getByText(/1\.3K tokens · ≈\$0\.010/)).toBeVisible();
+
+    await sidePanel.setViewportSize({ width: 420, height: 320 });
+    const brandHeader = sidePanel.locator('.panel-header');
+    const sessionHeader = sidePanel.locator('.session-heading');
+    const mascot = brandHeader.locator('.coach-mascot');
+    await sidePanel.evaluate(() => window.scrollTo(0, 0));
+    await expect
+      .poll(async () => {
+        const brandBox = await brandHeader.boundingBox();
+        const sessionBox = await sessionHeader.boundingBox();
+        return Boolean(
+          brandBox && sessionBox && sessionBox.y >= brandBox.y + brandBox.height,
+        );
+      })
+      .toBe(true);
+
+    await sidePanel.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect
+      .poll(async () => Math.round((await sessionHeader.boundingBox())?.y ?? -1))
+      .toBe(0);
+    await expect(
+      sessionHeader.getByRole('heading', { name: 'Delayed test problem' }),
+    ).toBeVisible();
+    await expect(sessionHeader.getByText('CF ≈1300')).toBeVisible();
+    await expect(
+      sessionHeader.getByRole('button', { name: 'Change problem' }),
+    ).toBeVisible();
+    await expect(mascot).toBeVisible();
+    await expect
+      .poll(() =>
+        sidePanel.evaluate(() => {
+          const session = document.querySelector('.session-heading');
+          const brandTitle = document.querySelector('.panel-header h1');
+          if (!session || !brandTitle) return false;
+          const rect = brandTitle.getBoundingClientRect();
+          const topElement = document.elementFromPoint(
+            rect.left + rect.width / 2,
+            rect.top + rect.height / 2,
+          );
+          return Boolean(topElement && session.contains(topElement));
+        }),
+      )
+      .toBe(true);
+
+    await sidePanel.evaluate(() => window.scrollTo(0, 0));
+    await expect
+      .poll(async () => {
+        const brandBox = await brandHeader.boundingBox();
+        const sessionBox = await sessionHeader.boundingBox();
+        return Boolean(
+          brandBox && sessionBox && sessionBox.y >= brandBox.y + brandBox.height,
+        );
+      })
+      .toBe(true);
+    await expect(
+      brandHeader.getByRole('heading', { name: 'Algo Coach' }),
+    ).toBeVisible();
+    await expect(brandHeader.getByRole('button', { name: 'Settings' })).toBeVisible();
+    await expect(mascot).toBeVisible();
   } finally {
     await context?.close();
   }

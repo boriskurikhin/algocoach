@@ -135,6 +135,12 @@ describe('side panel coaching flow', () => {
       });
     });
     expect(screen.getByText('What are you thinking so far?')).toBeInTheDocument();
+    expect(screen.getByText(/Hint stage: listen/)).toBeInTheDocument();
+    expect(screen.getByText('CF ≈1300')).toHaveClass('cf-rating-pupil');
+    expect(screen.getByText('CF ≈1300')).toHaveAttribute(
+      'title',
+      'Estimated Codeforces-equivalent rating · Pupil',
+    );
     expect(screen.getByRole('img', { name: 'Coach welcomes you' })).toHaveAttribute(
       'data-mascot-state',
       'greeting',
@@ -188,7 +194,7 @@ describe('side panel coaching flow', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Hint stage: clarify')).toBeInTheDocument();
+      expect(screen.getByText(/Hint stage: clarify/)).toBeInTheDocument();
     });
     expect(
       screen.getByRole('img', { name: 'Coach noticed a useful insight' }),
@@ -197,6 +203,82 @@ describe('side panel coaching flow', () => {
     expect(document.querySelector('.token.builtin')).toHaveTextContent('min');
     expect(screen.getByText('One batch')).toBeInTheDocument();
     expect(screen.getByText(sceneFixture.question)).toBeInTheDocument();
+  });
+
+  it('closes the composer after the learner reaches an optimal solution', async () => {
+    mocks.sendMessage.mockImplementation(runtimeResponseWithSession);
+    render(<App />);
+
+    expect(
+      await screen.findByText('I think I need to round up each batch.'),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('What are you thinking?'), {
+      target: {
+        value:
+          'I preserve every surplus unit and process each conversion once, so it is linear.',
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the coach' }));
+
+    act(() => {
+      emit({
+        type: 'coach:reply',
+        sessionId: sessionFixture.id,
+        stage: 'complete',
+        usage: sessionFixture.usage,
+        message: {
+          id: 'completed',
+          role: 'assistant',
+          content:
+            'Yes — you’ve arrived at an optimal solution. This coaching session is complete.',
+          createdAt: 3,
+        },
+      });
+    });
+
+    expect(screen.getByText(/^Solved/)).toBeInTheDocument();
+    expect(screen.getByText(/arrived at an optimal solution/i)).toBeInTheDocument();
+    expect(screen.getByText('Optimal solution reached.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'Coach is proud of your completed lesson' }),
+    ).toHaveAttribute('data-mascot-state', 'complete');
+    expect(screen.queryByLabelText('What are you thinking?')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Ask the coach' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Choose another problem' }),
+    ).toBeVisible();
+  });
+
+  it('colors an official rating using its Codeforces rank', async () => {
+    const grandmasterProblem = {
+      ...problemFixture,
+      source: {
+        ...problemFixture.source,
+        site: 'codeforces' as const,
+      },
+      rating: '*2400',
+      codeforcesRating: {
+        value: 2_400,
+        source: 'official' as const,
+      },
+    };
+    mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
+      if (request.type === 'problem:extract') {
+        return {
+          ok: true,
+          data: { context: grandmasterProblem, likelyProblem: true },
+        };
+      }
+      return runtimeResponse(request);
+    });
+
+    render(<App />);
+
+    const rating = await screen.findByText('CF 2400');
+    expect(rating).toHaveClass('cf-rating-grandmaster');
+    expect(rating).toHaveAttribute('title', 'Official Codeforces rating · Grandmaster');
   });
 
   it('restores the active conversation when the panel is reopened', async () => {
@@ -210,7 +292,7 @@ describe('side panel coaching flow', () => {
     expect(
       screen.getByText('I think I need to round up each batch.'),
     ).toBeInTheDocument();
-    expect(screen.getByText('Hint stage: listen')).toBeInTheDocument();
+    expect(screen.getByText(/Hint stage: listen/)).toBeInTheDocument();
     expect(mocks.sendMessage).not.toHaveBeenCalledWith({ type: 'problem:extract' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Change problem' }));
@@ -240,7 +322,7 @@ describe('side panel coaching flow', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Session storage is unavailable.',
     );
-    expect(screen.getByText('Hint stage: listen')).toBeInTheDocument();
+    expect(screen.getByText(/Hint stage: listen/)).toBeInTheDocument();
   });
 
   it('reconnects before the next coaching message after an idle disconnect', async () => {

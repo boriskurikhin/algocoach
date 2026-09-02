@@ -110,9 +110,11 @@ describe('coaching contract prompts', () => {
       coachingMap: coachingMapFixture,
       learner: learnerSnapshotFixture,
       problemKey: 'problem',
+      conversation: sessionFixture.messages,
     });
     expect(input).toContain('PRIVATE_ANSWER_BOUNDARY_START');
     expect(input).toContain('UNTRUSTED_LATEST_LEARNER_MESSAGE_START');
+    expect(input).toContain('UNTRUSTED_CONVERSATION_EVIDENCE_START');
     expect(RESPONSE_GUARD_SYSTEM_PROMPT).toContain('at most one rung');
     expect(RESPONSE_GUARD_SYSTEM_PROMPT).toContain(
       `${MAX_TEACHING_SNIPPET_LINES} lines`,
@@ -121,6 +123,7 @@ describe('coaching contract prompts', () => {
     expect(RESPONSE_GUARD_SYSTEM_PROMPT).toContain(
       'preserve the same scaffold and layout',
     );
+    expect(RESPONSE_GUARD_SYSTEM_PROMPT).toContain('solutionStatus to optimal only');
     expect(PROBLEM_ANALYST_SYSTEM_PROMPT).toContain('what stays fixed');
   });
 });

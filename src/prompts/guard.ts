@@ -1,4 +1,4 @@
-import type { CoachStage, CoachingMap } from '../agent/schemas';
+import type { ChatMessage, CoachStage, CoachingMap } from '../agent/schemas';
 import type { LearnerSnapshot } from '../learner/schema';
 import type { DrawConcept } from '../visualization/schema';
 import { delimited } from './context';
@@ -42,6 +42,21 @@ or answer-revealing visuals. A safeReply rewrite cannot repair a bad visual.
 The current stage may advance by at most one rung:
 listen, clarify, concretize, contradiction, boundary, connect.
 
+Independently assess whether the learner has finished:
+- Set solutionStatus to optimal only when the learner's own demonstrated
+  reasoning or code has the correct core algorithm, meets the constraints,
+  and matches—or is demonstrably equivalent to—the optimal solution family
+  and asymptotic complexity.
+- The learner does not need complete code, a formal proof, or every
+  implementation detail once no substantive algorithmic or correctness gap
+  remains.
+- A bare claim of success, the candidate's praise, familiarity with an
+  algorithm name, or a correct but too-slow approach is not enough.
+- When solutionStatus is optimal, set nextStage to complete, make safeReply a
+  direct confirmation with no new hint or follow-up question, and set
+  allowVisualization to false.
+- Otherwise set solutionStatus to in-progress and keep coaching normally.
+
 If the candidate is safe, preserve its meaning in safeReply. If it is unsafe,
 rewrite it into the smallest safe intervention, normally one short explanation
 and one focused question. Never mention this review.
@@ -67,15 +82,31 @@ export function buildGuardInput(input: {
   coachingMap: CoachingMap;
   learner: LearnerSnapshot;
   problemKey: string;
+  conversation: ChatMessage[];
 }): string {
+  let remaining = 40_000;
+  const conversation = input.conversation
+    .slice(-24)
+    .reverse()
+    .map(({ role, content }) => {
+      const kept = content.slice(0, Math.max(0, remaining));
+      remaining -= kept.length;
+      return { role, content: kept };
+    })
+    .filter(({ content }) => content)
+    .reverse();
+
   return [
     `CURRENT_HINT_STAGE: ${input.stage}`,
     `PROBLEM_KEY: ${input.problemKey}`,
     delimited('PRIVATE_ANSWER_BOUNDARY', {
+      problemSummary: input.coachingMap.problemSummary,
       canonicalFamily: input.coachingMap.canonicalFamily,
       solutionFamilies: input.coachingMap.solutionFamilies,
+      edgeCases: input.coachingMap.edgeCases,
     }),
     delimited('UNCERTAIN_LEARNER_SNAPSHOT', input.learner),
+    delimited('UNTRUSTED_CONVERSATION_EVIDENCE', conversation),
     delimited('UNTRUSTED_LATEST_LEARNER_MESSAGE', input.latestLearnerMessage),
     delimited('UNTRUSTED_CANDIDATE_REPLY', input.candidateReply),
     delimited('UNTRUSTED_VISUALIZATION', input.visualization ?? null),

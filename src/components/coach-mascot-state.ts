@@ -38,6 +38,7 @@ const STAGE_ORDER: readonly CoachStage[] = [
   'contradiction',
   'boundary',
   'connect',
+  'complete',
 ];
 
 export const COACH_MASCOT_ASSET: Record<CoachMascotState, string> = {
@@ -75,8 +76,8 @@ export function coachMascotMomentForStageChange(
   next: CoachStage,
 ): CoachMascotMoment {
   if (STAGE_ORDER.indexOf(next) <= STAGE_ORDER.indexOf(previous)) return 'nudge';
-  if (next === 'connect') return 'complete';
-  if (next === 'boundary') return 'celebrate';
+  if (next === 'complete') return 'complete';
+  if (next === 'boundary' || next === 'connect') return 'celebrate';
   return 'aha';
 }
 
@@ -110,6 +111,8 @@ export function deriveCoachMascotState({
     case 'boundary':
       return 'support';
     case 'connect':
+      return 'celebrate';
+    case 'complete':
       return 'complete';
     default:
       return 'idle';

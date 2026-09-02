@@ -23,7 +23,11 @@ export function problemForPrompt(problem: ProblemContext) {
     statement,
     timeLimit: problem.timeLimit,
     memoryLimit: problem.memoryLimit,
-    rating: problem.rating,
+    siteDifficulty: problem.rating,
+    officialCodeforcesRating:
+      problem.codeforcesRating?.source === 'official'
+        ? problem.codeforcesRating.value
+        : undefined,
     tags: problem.tags,
   };
 }

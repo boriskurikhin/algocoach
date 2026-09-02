@@ -6,9 +6,9 @@ import {
 } from '../prompts/analyze';
 import type { ExtensionSettings } from '../storage/local';
 import {
-  CoachingMapSchema,
+  ProblemAnalysisSchema,
   PROBLEM_ANALYSIS_MAX_OUTPUT_TOKENS,
-  type CoachingMap,
+  type ProblemAnalysis,
 } from './schemas';
 import { requestStructuredResponse } from './openai-client';
 import type { SessionUsage } from './usage';
@@ -20,14 +20,14 @@ export async function analyzeProblem(
   onActivity?: () => void,
   signal?: AbortSignal,
   onUsage?: (usage: SessionUsage) => void,
-): Promise<CoachingMap> {
+): Promise<ProblemAnalysis> {
   return requestStructuredResponse({
     settings,
     onActivity,
     instructions: PROBLEM_ANALYST_SYSTEM_PROMPT,
     prompt: buildProblemAnalysisInput(problem, learner),
-    schema: CoachingMapSchema,
-    schemaName: 'private_coaching_map',
+    schema: ProblemAnalysisSchema,
+    schemaName: 'private_problem_analysis',
     // This cap includes hidden reasoning tokens, not just the compact JSON map.
     maxOutputTokens: PROBLEM_ANALYSIS_MAX_OUTPUT_TOKENS,
     invalidResultMessage:

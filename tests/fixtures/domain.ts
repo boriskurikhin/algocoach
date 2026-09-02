@@ -1,4 +1,8 @@
-import type { CoachingMap, CoachingSession } from '../../src/agent/schemas';
+import type {
+  CoachingMap,
+  CoachingSession,
+  ProblemAnalysis,
+} from '../../src/agent/schemas';
 import type { SessionUsage } from '../../src/agent/usage';
 import type { ProblemContext } from '../../src/extraction/schema';
 import type { LearnerSnapshot } from '../../src/learner/schema';
@@ -72,6 +76,11 @@ export const coachingMapFixture: CoachingMap = {
   visualizationOpportunities: ['Show one fixed-size batch and its unused units.'],
 };
 
+export const problemAnalysisFixture: ProblemAnalysis = {
+  coachingMap: coachingMapFixture,
+  estimatedCodeforcesRating: 1_300,
+};
+
 export const sessionUsageFixture: SessionUsage = {
   modelCalls: 1,
   inputTokens: 1_000,
@@ -86,7 +95,13 @@ export const sessionFixture: CoachingSession = {
   version: 1,
   id: 'session-1',
   problemKey: problemFixture.source.url,
-  problem: problemFixture,
+  problem: {
+    ...problemFixture,
+    codeforcesRating: {
+      value: problemAnalysisFixture.estimatedCodeforcesRating,
+      source: 'estimated',
+    },
+  },
   coachingMap: coachingMapFixture,
   stage: 'listen',
   messages: [

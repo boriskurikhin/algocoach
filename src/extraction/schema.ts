@@ -20,6 +20,13 @@ const ProblemSectionSchema = z.object({
   body: z.string().max(40_000),
 });
 
+export const CodeforcesRatingValueSchema = z.number().int().min(800).max(4_000);
+
+const CodeforcesRatingSchema = z.object({
+  value: CodeforcesRatingValueSchema,
+  source: z.enum(['official', 'estimated']),
+});
+
 export const ProblemContextSchema = z.object({
   version: z.literal(1),
   source: z.object({
@@ -37,6 +44,7 @@ export const ProblemContextSchema = z.object({
   timeLimit: z.string().max(200).optional(),
   memoryLimit: z.string().max(200).optional(),
   rating: z.string().max(100).optional(),
+  codeforcesRating: CodeforcesRatingSchema.optional(),
   tags: z.array(z.string().max(100)).max(50).default([]),
   sections: z.array(ProblemSectionSchema).max(50).default([]),
   confidence: z.number().min(0).max(1),

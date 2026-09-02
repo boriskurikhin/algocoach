@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  coachingMapFixture,
   learnerSnapshotFixture,
+  problemAnalysisFixture,
   problemFixture,
 } from '../fixtures/domain';
 import {
@@ -22,7 +22,7 @@ import { OPENAI_CONNECTION_TIMEOUT_MS } from '../../src/agent/schemas';
 describe('private problem analysis', () => {
   beforeEach(() => {
     resetResponseMocks(mocks);
-    mocks.parse.mockResolvedValue({ output_parsed: coachingMapFixture });
+    mocks.parse.mockResolvedValue({ output_parsed: problemAnalysisFixture });
   });
 
   it('uses structured, non-stored analysis with explicit trust boundaries', async () => {
@@ -31,7 +31,7 @@ describe('private problem analysis', () => {
         ...settings,
         reasoningMode: 'pro',
       }),
-    ).resolves.toEqual(coachingMapFixture);
+    ).resolves.toEqual(problemAnalysisFixture);
 
     const request = mocks.parse.mock.calls[0]?.[0];
     expect(request.model).toBe('gpt-5.6-sol');
@@ -44,6 +44,7 @@ describe('private problem analysis', () => {
     expect(request.input).toContain('UNTRUSTED_PROBLEM_DATA_START');
     expect(request.input).toContain('UNCERTAIN_LEARNER_SNAPSHOT_START');
     expect(request.instructions).toContain('private');
+    expect(request.instructions).toContain('Codeforces-equivalent difficulty');
     expect(JSON.stringify(request)).not.toContain('test-only-key');
   });
 
@@ -70,7 +71,7 @@ describe('private problem analysis', () => {
   it('reports final token usage to the session accumulator', async () => {
     const onUsage = vi.fn();
     mocks.parse.mockResolvedValueOnce({
-      output_parsed: coachingMapFixture,
+      output_parsed: problemAnalysisFixture,
       usage: {
         input_tokens: 100,
         input_tokens_details: { cached_tokens: 20, cache_write_tokens: 0 },
@@ -115,7 +116,7 @@ describe('private problem analysis', () => {
     vi.useFakeTimers();
     try {
       let finishResponse!: (value: {
-        output_parsed: typeof coachingMapFixture;
+        output_parsed: typeof problemAnalysisFixture;
       }) => void;
       mocks.parse.mockImplementationOnce(
         () =>
@@ -126,9 +127,9 @@ describe('private problem analysis', () => {
       const result = analyzeProblem(problemFixture, learnerSnapshotFixture, settings);
 
       await vi.advanceTimersByTimeAsync(OPENAI_CONNECTION_TIMEOUT_MS);
-      finishResponse({ output_parsed: coachingMapFixture });
+      finishResponse({ output_parsed: problemAnalysisFixture });
 
-      await expect(result).resolves.toEqual(coachingMapFixture);
+      await expect(result).resolves.toEqual(problemAnalysisFixture);
     } finally {
       vi.useRealTimers();
     }

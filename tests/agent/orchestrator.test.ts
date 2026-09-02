@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyLearnerProfile } from '../../src/learner/update-profile';
 import {
   coachingMapFixture,
+  problemAnalysisFixture,
   problemFixture,
   sceneFixture,
   sessionFixture,
@@ -51,7 +52,7 @@ describe('coaching orchestration', () => {
     mocks.getProfile.mockResolvedValue(createEmptyLearnerProfile(1));
     mocks.saveProfile.mockImplementation(async (profile) => profile);
     mocks.saveSession.mockImplementation(async (session) => session);
-    mocks.analyze.mockResolvedValue(coachingMapFixture);
+    mocks.analyze.mockResolvedValue(problemAnalysisFixture);
   });
 
   it('studies the problem before creating the learner-visible session', async () => {
@@ -59,7 +60,7 @@ describe('coaching orchestration', () => {
     mocks.analyze.mockImplementationOnce(async (...args: unknown[]) => {
       const recordUsage = args[5] as (usage: typeof sessionUsageFixture) => void;
       recordUsage(sessionUsageFixture);
-      return coachingMapFixture;
+      return problemAnalysisFixture;
     });
     const session = await startCoachingSession({
       problem: problemFixture,
@@ -69,6 +70,10 @@ describe('coaching orchestration', () => {
 
     expect(mocks.analyze).toHaveBeenCalledOnce();
     expect(session.coachingMap).toEqual(coachingMapFixture);
+    expect(session.problem.codeforcesRating).toEqual({
+      value: 1_300,
+      source: 'estimated',
+    });
     expect(session.messages[0]?.content).toMatch(/smallest example/i);
     expect(mocks.analyze).toHaveBeenCalledWith(
       problemFixture,
@@ -81,6 +86,35 @@ describe('coaching orchestration', () => {
     expect(session.usage).toEqual(sessionUsageFixture);
     expect(mocks.saveSession).toHaveBeenCalledWith(session);
     expect(onStatus).toHaveBeenCalledWith('studying', expect.any(String));
+  });
+
+  it('keeps an official Codeforces rating instead of the model estimate', async () => {
+    const officialProblem = {
+      ...problemFixture,
+      source: {
+        ...problemFixture.source,
+        site: 'codeforces' as const,
+      },
+      rating: '*2100',
+      codeforcesRating: {
+        value: 2_100,
+        source: 'official' as const,
+      },
+    };
+    mocks.analyze.mockResolvedValueOnce({
+      ...problemAnalysisFixture,
+      estimatedCodeforcesRating: 2_600,
+    });
+
+    const session = await startCoachingSession({
+      problem: officialProblem,
+      settings,
+    });
+
+    expect(session.problem.codeforcesRating).toEqual({
+      value: 2_100,
+      source: 'official',
+    });
   });
 
   it('persists only the guarded reply and guarded profile evidence', async () => {
@@ -100,6 +134,7 @@ describe('coaching orchestration', () => {
         violations: ['none'],
         safeReply: 'What quantity should remain unchanged?',
         nextStage: 'clarify',
+        solutionStatus: 'in-progress',
         allowVisualization: true,
         profileObservations: [
           {
@@ -127,6 +162,12 @@ describe('coaching orchestration', () => {
         sessionId: sessionFixture.id,
         candidateReply: 'Candidate text',
         latestLearnerMessage: 'I think the total should stay fixed.',
+        conversation: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: 'I think the total should stay fixed.',
+          }),
+        ]),
       }),
     );
     expect(mocks.draft.mock.invocationCallOrder[0]).toBeLessThan(
@@ -146,6 +187,57 @@ describe('coaching orchestration', () => {
       }),
     );
     expect(mocks.saveSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('persists an optimal solution as a completed terminal session', async () => {
+    mocks.getSession.mockResolvedValue(sessionFixture);
+    mocks.draft.mockResolvedValue({
+      reply: 'Yes, that is optimal.',
+      visualization: sceneFixture,
+    });
+    mocks.guard.mockResolvedValue({
+      allowed: true,
+      violations: ['none'],
+      safeReply:
+        'Yes — you’ve arrived at an optimal solution. This coaching session is complete.',
+      nextStage: 'complete',
+      solutionStatus: 'optimal',
+      allowVisualization: false,
+      profileObservations: [],
+    });
+
+    const { session, message } = await respondToLearner({
+      sessionId: sessionFixture.id,
+      content:
+        'Each conversion is processed once while I preserve surplus, so this is linear.',
+      settings,
+    });
+
+    expect(session.stage).toBe('complete');
+    expect(message.content).toMatch(/optimal solution/i);
+    expect(message.visualization).toBeUndefined();
+    expect(mocks.saveSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({ stage: 'complete' }),
+    );
+  });
+
+  it('rejects further messages after the session is complete', async () => {
+    mocks.getSession.mockResolvedValue({
+      ...sessionFixture,
+      stage: 'complete',
+    });
+
+    await expect(
+      respondToLearner({
+        sessionId: sessionFixture.id,
+        content: 'Can I ask one more question?',
+        settings,
+      }),
+    ).rejects.toThrow(/session is complete/i);
+
+    expect(mocks.draft).not.toHaveBeenCalled();
+    expect(mocks.guard).not.toHaveBeenCalled();
+    expect(mocks.saveSession).not.toHaveBeenCalled();
   });
 
   it('keeps billable usage when a model step fails after reporting it', async () => {

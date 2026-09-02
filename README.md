@@ -11,10 +11,14 @@ manifesto is the product contract.
 
 - Extracts problem statements from LeetCode, DMOJ, Codeforces, USACO, and
   Advent of Code.
+- Shows the official Codeforces rating when available, or a clearly marked
+  CF-equivalent estimate after studying the problem.
 - Uses a conservative semantic fallback for other problem-setting sites.
 - Lets the learner paste a statement when page recognition is uncertain.
 - Privately builds a solution-aware coaching map with GPT-5.6 Sol.
 - Runs a separate pedagogy gate before any response reaches the learner.
+- Recognizes when the learner has demonstrated an optimal solution, confirms
+  it explicitly, and closes the coaching session to further hints.
 - Refuses complete code, answer-shaped pseudocode, passing rewrites, and
   premature algorithm reveals.
 - Allows one small teaching snippet for isolated syntax or a learner-owned

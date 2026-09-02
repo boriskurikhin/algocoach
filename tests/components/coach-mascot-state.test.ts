@@ -60,6 +60,9 @@ describe('coach mascot state', () => {
       'support',
     );
     expect(deriveCoachMascotState({ ...baseContext, stage: 'connect' })).toBe(
+      'celebrate',
+    );
+    expect(deriveCoachMascotState({ ...baseContext, stage: 'complete' })).toBe(
       'complete',
     );
   });
@@ -69,7 +72,8 @@ describe('coach mascot state', () => {
     expect(coachMascotMomentForStageChange('contradiction', 'boundary')).toBe(
       'celebrate',
     );
-    expect(coachMascotMomentForStageChange('boundary', 'connect')).toBe('complete');
+    expect(coachMascotMomentForStageChange('boundary', 'connect')).toBe('celebrate');
+    expect(coachMascotMomentForStageChange('connect', 'complete')).toBe('complete');
     expect(coachMascotMomentForStageChange('clarify', 'clarify')).toBe('nudge');
   });
 });

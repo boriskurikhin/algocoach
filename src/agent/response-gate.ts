@@ -7,13 +7,15 @@ import { requestStructuredResponse } from './openai-client';
 import {
   GuardResultSchema,
   RESPONSE_GUARD_MAX_OUTPUT_TOKENS,
+  type ChatMessage,
   type CoachStage,
   type CoachingMap,
   type GuardResult,
+  type HintStage,
 } from './schemas';
 import type { SessionUsage } from './usage';
 
-const stageOrder: CoachStage[] = [
+const stageOrder: HintStage[] = [
   'listen',
   'clarify',
   'concretize',
@@ -23,6 +25,8 @@ const stageOrder: CoachStage[] = [
 ];
 
 function clampStage(current: CoachStage, requested: CoachStage): CoachStage {
+  if (current === 'complete') return 'complete';
+  if (requested === 'complete') return current;
   const currentIndex = stageOrder.indexOf(current);
   const requestedIndex = stageOrder.indexOf(requested);
   return (
@@ -30,6 +34,10 @@ function clampStage(current: CoachStage, requested: CoachStage): CoachStage {
     current
   );
 }
+
+const OPTIMAL_SOLUTION_REPLY =
+  'Yes — you’ve arrived at an optimal solution. Your core algorithm and target ' +
+  'complexity match the intended approach. This coaching session is complete.';
 
 export function hasObviousSolutionLeak(value: string): boolean {
   const snippets = [...value.matchAll(/```[\w+#-]*\n?([\s\S]*?)```/g)].map(
@@ -66,6 +74,7 @@ export async function guardCoachResponse(input: {
   coachingMap: CoachingMap;
   learner: LearnerSnapshot;
   problemKey: string;
+  conversation: ChatMessage[];
   settings: ExtensionSettings;
   onActivity?: () => void;
   signal?: AbortSignal;
@@ -86,6 +95,15 @@ export async function guardCoachResponse(input: {
     promptCacheKey: `socratic-coach:guard:${input.sessionId}`,
   });
 
+  if (guarded.solutionStatus === 'optimal') {
+    return {
+      ...guarded,
+      safeReply: OPTIMAL_SOLUTION_REPLY,
+      nextStage: 'complete',
+      allowVisualization: false,
+    };
+  }
+
   if (hasObviousSolutionLeak(guarded.safeReply)) {
     return {
       allowed: false,
@@ -93,6 +111,7 @@ export async function guardCoachResponse(input: {
       safeReply:
         'Let’s slow this down to one check. What should the key quantity represent before and after one tiny example?',
       nextStage: input.stage,
+      solutionStatus: 'in-progress',
       allowVisualization: false,
       profileObservations: guarded.profileObservations,
     };

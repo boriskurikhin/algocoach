@@ -77,6 +77,10 @@ describe('problem adapters', () => {
       }),
     );
     expect(context.rating).toBe('*1200');
+    expect(context.codeforcesRating).toEqual({
+      value: 1_200,
+      source: 'official',
+    });
     expect(context.tags).toContain('greedy');
     expect(context.statement).toContain('Input');
     expect(context.statement).toContain('Output');
@@ -105,6 +109,7 @@ describe('problem adapters', () => {
     expect(context.timeLimit).toBe('2.0s');
     expect(context.memoryLimit).toBe('256M');
     expect(context.rating).toBe('5');
+    expect(context.codeforcesRating).toBeUndefined();
     expect(context.source.site).toBe('dmoj');
   });
 
