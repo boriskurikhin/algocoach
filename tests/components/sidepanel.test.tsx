@@ -277,8 +277,9 @@ describe('side panel coaching flow', () => {
         screen.getByText('Reading the statement and constraints…'),
       ).toBeInTheDocument();
       expect(
-        screen.getByText(/OpenAI.*Standard.*high reasoning.*10m limit/),
+        screen.getByText(/OpenAI.*Standard.*high reasoning.*0s elapsed/),
       ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
 
       act(() => vi.advanceTimersByTime(4_000));
       expect(
@@ -299,11 +300,26 @@ describe('side panel coaching flow', () => {
           name: 'Coach is here to help you get unstuck',
         }),
       ).toHaveAttribute('data-mascot-state', 'support');
-      expect(screen.queryByText(/10m limit/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
     } finally {
       view.unmount();
       vi.useRealTimers();
     }
+  });
+
+  it('lets the learner stop a long-running model stream', async () => {
+    render(<App />);
+    expect(await screen.findByText('Batch Sums')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start coaching' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(mocks.postMessage).toHaveBeenLastCalledWith({ type: 'coach:cancel' });
+
+    act(() => {
+      emit({ type: 'coach:canceled' });
+    });
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('keeps the worker session alive while a model request is pending', async () => {

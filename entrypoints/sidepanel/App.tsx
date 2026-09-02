@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import {
   COACH_PROCESSING_LABEL,
-  COACH_STEP_TIMEOUT_MINUTES,
   type ChatMessage,
   type CoachStage,
   type CoachStatus,
@@ -318,6 +317,9 @@ export default function App() {
         stageRef.current = event.stage;
         setUsage(event.usage);
         showMascotMoment(coachMascotMomentForStageChange(previousStage, event.stage));
+      } else if (event.type === 'coach:canceled') {
+        finishRequest();
+        setError('');
       } else {
         if (event.usage) setUsage(event.usage);
         failRequest(event.message);
@@ -405,6 +407,11 @@ export default function App() {
       'Could not reconnect to the coach. Reopen the panel; your conversation will be restored.',
     );
     return false;
+  };
+
+  const cancelRequest = () => {
+    if (!status) return;
+    postCoachMessage({ type: 'coach:cancel' });
   };
 
   const startSession = (problem: ProblemContext) => {
@@ -703,27 +710,35 @@ export default function App() {
       )}
 
       {status ? (
-        <p className="status" aria-live="polite">
-          <span className="status-dot" aria-hidden="true" />
-          <span className="status-copy">
-            <strong>{status.label}</strong>
-            <span className="status-progress">
-              {statusProgressMessage(status, statusClock)}
+        <div className="status-row">
+          <p className="status" aria-live="polite">
+            <span className="status-dot" aria-hidden="true" />
+            <span className="status-copy">
+              <span className="status-heading">
+                <strong>{status.label}</strong>
+                <button
+                  className="link-button status-stop"
+                  type="button"
+                  onClick={cancelRequest}
+                >
+                  Stop
+                </button>
+              </span>
+              <span className="status-progress">
+                {statusProgressMessage(status, statusClock)}
+              </span>
+              <span className="status-detail" aria-hidden="true">
+                {status.kind === 'saving-profile'
+                  ? 'Local only'
+                  : `OpenAI · ${COACH_PROCESSING_LABEL} · ${
+                      settings?.reasoningEffort ?? 'high'
+                    } reasoning`}
+                {' · '}
+                {elapsedTime(status.startedAt, statusClock)} elapsed
+              </span>
             </span>
-            <span className="status-detail" aria-hidden="true">
-              {status.kind === 'saving-profile'
-                ? 'Local only'
-                : `OpenAI · ${COACH_PROCESSING_LABEL} · ${
-                    settings?.reasoningEffort ?? 'high'
-                  } reasoning`}
-              {' · '}
-              {elapsedTime(status.startedAt, statusClock)} elapsed
-              {status.kind === 'saving-profile'
-                ? ''
-                : ` · ${COACH_STEP_TIMEOUT_MINUTES}m limit`}
-            </span>
-          </span>
-        </p>
+          </p>
+        </div>
       ) : null}
       {error ? (
         <p className="error" role="alert">

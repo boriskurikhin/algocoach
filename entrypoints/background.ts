@@ -171,6 +171,7 @@ export default defineBackground(() => {
 
     let busy = false;
     let activeRequest: AbortController | null = null;
+    let cancelRequested = false;
     const post = (event: unknown): void => {
       const parsed = CoachServerEventSchema.safeParse(event);
       if (!parsed.success) return;
@@ -189,6 +190,13 @@ export default defineBackground(() => {
       }
       const requestMessage = parsed.data;
       if (requestMessage.type === 'coach:keepalive') return;
+      if (requestMessage.type === 'coach:cancel') {
+        if (activeRequest) {
+          cancelRequested = true;
+          activeRequest.abort();
+        }
+        return;
+      }
       if (busy) {
         post({
           type: 'coach:error',
@@ -198,6 +206,7 @@ export default defineBackground(() => {
       }
 
       busy = true;
+      cancelRequested = false;
       const request = new AbortController();
       activeRequest = request;
       void (async () => {
@@ -213,6 +222,7 @@ export default defineBackground(() => {
               onModelActivity,
               signal: request.signal,
             });
+            if (request.signal.aborted) return;
             post({
               type: 'session:ready',
               ...toRestorableSession(session),
@@ -228,6 +238,7 @@ export default defineBackground(() => {
             onModelActivity,
             signal: request.signal,
           });
+          if (request.signal.aborted) return;
           for (const chunk of message.content.match(/[\s\S]{1,36}/g) ?? [
             message.content,
           ]) {
@@ -241,18 +252,25 @@ export default defineBackground(() => {
             usage: session.usage,
           });
         } catch (error) {
-          const failedSession =
-            requestMessage.type === 'session:user-message'
-              ? await getSession(requestMessage.sessionId).catch(() => null)
-              : null;
-          post({
-            type: 'coach:error',
-            message: safeOpenAIError(error),
-            ...(failedSession ? { usage: failedSession.usage } : {}),
-          });
+          if (!request.signal.aborted) {
+            const failedSession =
+              requestMessage.type === 'session:user-message'
+                ? await getSession(requestMessage.sessionId).catch(() => null)
+                : null;
+            if (request.signal.aborted) return;
+            post({
+              type: 'coach:error',
+              message: safeOpenAIError(error),
+              ...(failedSession ? { usage: failedSession.usage } : {}),
+            });
+          }
         } finally {
+          if (cancelRequested && request.signal.aborted) {
+            post({ type: 'coach:canceled' });
+          }
           if (activeRequest === request) activeRequest = null;
           busy = false;
+          cancelRequested = false;
         }
       })();
     });

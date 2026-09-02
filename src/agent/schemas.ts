@@ -4,8 +4,7 @@ import { ProfileObservationSchema } from '../learner/schema';
 import { DrawConceptSchema } from '../visualization/schema';
 import { EMPTY_SESSION_USAGE, SessionUsageSchema } from './usage';
 
-export const COACH_STEP_TIMEOUT_MINUTES = 10;
-export const COACH_STEP_TIMEOUT_MS = COACH_STEP_TIMEOUT_MINUTES * 60_000;
+export const OPENAI_CONNECTION_TIMEOUT_MS = 10 * 60_000;
 export const PROBLEM_ANALYSIS_MAX_OUTPUT_TOKENS = 64_000;
 export const COACH_RESPONSE_MAX_OUTPUT_TOKENS = 48_000;
 export const RESPONSE_GUARD_MAX_OUTPUT_TOKENS = 24_000;

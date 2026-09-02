@@ -6,11 +6,7 @@ import {
 import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import type { ExtensionSettings } from '../storage/local';
-import {
-  COACH_PROCESSING_TIER,
-  COACH_STEP_TIMEOUT_MINUTES,
-  COACH_STEP_TIMEOUT_MS,
-} from './schemas';
+import { COACH_PROCESSING_TIER, OPENAI_CONNECTION_TIMEOUT_MS } from './schemas';
 import { summarizeResponseUsage, type SessionUsage } from './usage';
 
 type ResponseBody = Parameters<OpenAI['responses']['stream']>[0];
@@ -19,9 +15,6 @@ class CoachRequestError extends Error {}
 
 const OUTPUT_BUDGET_ERROR =
   'OpenAI reached this step’s reasoning/output budget before finishing. Try again; hard problems can vary between runs.';
-const MODEL_STEP_TIMEOUT_ERROR =
-  `OpenAI did not finish this step within ${COACH_STEP_TIMEOUT_MINUTES} minutes. ` +
-  'Try the request again.';
 const CONTENT_FILTER_ERROR =
   'OpenAI’s safety filter stopped this request. Try a shorter problem statement.';
 
@@ -34,7 +27,7 @@ export function createOpenAIClient(settings: ExtensionSettings): OpenAI {
     apiKey: settings.apiKey,
     dangerouslyAllowBrowser: true,
     maxRetries: 0,
-    timeout: COACH_STEP_TIMEOUT_MS,
+    timeout: OPENAI_CONNECTION_TIMEOUT_MS,
   });
 }
 
@@ -75,22 +68,10 @@ export async function requestModelResponse<Body extends ResponseBody>(
     { signal: options.signal },
   );
   stream.on('event', () => onActivity?.());
-  // The SDK timeout stops waiting for response headers, but a streaming body can
-  // continue afterward. Abort the stream explicitly to enforce a true wall clock.
-  let deadlineReached = false;
-  const deadline = setTimeout(() => {
-    deadlineReached = true;
-    stream.abort();
-  }, COACH_STEP_TIMEOUT_MS);
-  let response: Awaited<ReturnType<typeof stream.finalResponse>>;
-  try {
-    response = await stream.finalResponse();
-  } catch (error) {
-    if (deadlineReached) throw new CoachRequestError(MODEL_STEP_TIMEOUT_ERROR);
-    throw error;
-  } finally {
-    clearTimeout(deadline);
-  }
+  // The SDK timeout covers opening the streaming response. Once OpenAI has
+  // accepted the request, let hard reasoning finish; the caller's signal is
+  // the explicit cancellation path.
+  const response = await stream.finalResponse();
   onActivity?.();
   if (response.usage) options.onUsage?.(summarizeResponseUsage(response.usage));
 

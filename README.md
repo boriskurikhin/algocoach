@@ -80,8 +80,10 @@ more slowly. Stable per-session cache keys improve reuse of repeated prompt
 prefixes without removing coaching context.
 
 Hard problems get larger reasoning/output budgets: 64k tokens for the private
-analysis, 48k for a coaching draft, and 24k for the safety pass. Every streamed
-model step has a true 10-minute wall-clock deadline.
+analysis, 48k for a coaching draft, and 24k for the safety pass. Once OpenAI
+accepts a streamed model step, the extension lets it finish instead of imposing
+an additional wall-clock cutoff. The learner can stop it explicitly or close
+the panel to abort the request.
 
 ## Learner memory
 

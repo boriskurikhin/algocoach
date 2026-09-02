@@ -89,6 +89,7 @@ export const RuntimeResponseSchema = z.discriminatedUnion('ok', [
 
 export const CoachClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('coach:keepalive') }),
+  z.object({ type: z.literal('coach:cancel') }),
   z.object({
     type: z.literal('session:start'),
     problem: ProblemContextSchema,
@@ -119,6 +120,7 @@ export const CoachServerEventSchema = z.discriminatedUnion('type', [
     stage: CoachStageSchema,
     usage: SessionUsageSchema,
   }),
+  z.object({ type: z.literal('coach:canceled') }),
   z.object({
     type: z.literal('coach:error'),
     message: z.string().min(1).max(1_000),

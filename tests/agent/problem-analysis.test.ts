@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('openai', (importOriginal) => stubOpenAI(mocks, importOriginal));
 
 import { analyzeProblem } from '../../src/agent/problem-analysis';
-import { COACH_STEP_TIMEOUT_MS } from '../../src/agent/schemas';
+import { OPENAI_CONNECTION_TIMEOUT_MS } from '../../src/agent/schemas';
 
 describe('private problem analysis', () => {
   beforeEach(() => {
@@ -111,15 +111,24 @@ describe('private problem analysis', () => {
     ).rejects.toThrow('reasoning/output budget');
   });
 
-  it('enforces the deadline across the complete response stream', async () => {
+  it('lets an accepted model stream run past the former wall-clock cutoff', async () => {
     vi.useFakeTimers();
     try {
-      mocks.parse.mockImplementationOnce(() => new Promise(() => undefined));
+      let finishResponse!: (value: {
+        output_parsed: typeof coachingMapFixture;
+      }) => void;
+      mocks.parse.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishResponse = resolve;
+          }),
+      );
       const result = analyzeProblem(problemFixture, learnerSnapshotFixture, settings);
-      const rejection = expect(result).rejects.toThrow('within 10 minutes');
 
-      await vi.advanceTimersByTimeAsync(COACH_STEP_TIMEOUT_MS);
-      await rejection;
+      await vi.advanceTimersByTimeAsync(OPENAI_CONNECTION_TIMEOUT_MS);
+      finishResponse({ output_parsed: coachingMapFixture });
+
+      await expect(result).resolves.toEqual(coachingMapFixture);
     } finally {
       vi.useRealTimers();
     }
