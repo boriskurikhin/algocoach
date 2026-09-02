@@ -119,22 +119,36 @@ test('loads the packaged settings and side-panel surfaces', async () => {
     await sidePanel.setViewportSize({ width: 420, height: 320 });
     const brandHeader = sidePanel.locator('.panel-header');
     const sessionHeader = sidePanel.locator('.session-heading');
+    const sessionSurface = sessionHeader.locator('.session-heading-surface');
     const mascot = brandHeader.locator('.coach-mascot');
     await sidePanel.evaluate(() => window.scrollTo(0, 0));
     await expect
       .poll(async () => {
         const brandBox = await brandHeader.boundingBox();
         const sessionBox = await sessionHeader.boundingBox();
-        return Boolean(
-          brandBox && sessionBox && sessionBox.y >= brandBox.y + brandBox.height,
-        );
+        if (!brandBox || !sessionBox) return Number.POSITIVE_INFINITY;
+        return Math.abs(sessionBox.y - (brandBox.y + brandBox.height));
       })
-      .toBe(true);
+      .toBeLessThanOrEqual(1);
+    await expect
+      .poll(() =>
+        sessionSurface.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).paddingLeft),
+        ),
+      )
+      .toBe(0);
 
     await sidePanel.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await expect
       .poll(async () => Math.round((await sessionHeader.boundingBox())?.y ?? -1))
       .toBe(0);
+    await expect
+      .poll(() =>
+        sessionSurface.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).paddingLeft),
+        ),
+      )
+      .toBeGreaterThan(0);
     await expect(
       sessionHeader.getByRole('heading', { name: 'Delayed test problem' }),
     ).toBeVisible();
@@ -164,11 +178,17 @@ test('loads the packaged settings and side-panel surfaces', async () => {
       .poll(async () => {
         const brandBox = await brandHeader.boundingBox();
         const sessionBox = await sessionHeader.boundingBox();
-        return Boolean(
-          brandBox && sessionBox && sessionBox.y >= brandBox.y + brandBox.height,
-        );
+        if (!brandBox || !sessionBox) return Number.POSITIVE_INFINITY;
+        return Math.abs(sessionBox.y - (brandBox.y + brandBox.height));
       })
-      .toBe(true);
+      .toBeLessThanOrEqual(1);
+    await expect
+      .poll(() =>
+        sessionSurface.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).paddingLeft),
+        ),
+      )
+      .toBe(0);
     await expect(
       brandHeader.getByRole('heading', { name: 'Algo Coach' }),
     ).toBeVisible();

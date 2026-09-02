@@ -538,7 +538,7 @@ export default function App() {
   });
 
   return (
-    <main className="panel-shell">
+    <main className={sessionId ? 'panel-shell panel-shell-session' : 'panel-shell'}>
       <header className="panel-header">
         <div className="brand-lockup">
           <CoachMascot state={mascotState} />
@@ -680,36 +680,41 @@ export default function App() {
       ) : (
         <>
           <section className="session-heading">
-            <div className="session-summary">
-              <p className="eyebrow">
-                {sessionComplete ? 'Solved' : `Hint stage: ${stage}`}
-                {codeforcesRating ? (
-                  <>
-                    {' · '}
-                    <CodeforcesRating rating={codeforcesRating} />
-                  </>
-                ) : null}
-              </p>
-              <h2>{problem?.title || 'Coaching session'}</h2>
-              {usage.modelCalls ? (
-                <p
-                  className="session-usage"
-                  title={sessionUsageDetail}
-                  aria-label={sessionUsageDetail}
-                >
-                  {compactNumber.format(usage.inputTokens + usage.outputTokens)} tokens
-                  {' · '}≈{estimatedCost(usage.estimatedCostUsd)}
-                </p>
-              ) : null}
+            <div className="session-heading-surface">
+              <div className="session-summary">
+                <div className="session-meta-row">
+                  <p className="eyebrow">
+                    {sessionComplete ? 'Solved' : `Hint stage: ${stage}`}
+                    {codeforcesRating ? (
+                      <>
+                        {' · '}
+                        <CodeforcesRating rating={codeforcesRating} />
+                      </>
+                    ) : null}
+                  </p>
+                  {usage.modelCalls ? (
+                    <p
+                      className="session-usage"
+                      title={sessionUsageDetail}
+                      aria-label={sessionUsageDetail}
+                    >
+                      {compactNumber.format(usage.inputTokens + usage.outputTokens)}{' '}
+                      tokens
+                      {' · '}≈{estimatedCost(usage.estimatedCostUsd)}
+                    </p>
+                  ) : null}
+                </div>
+                <h2>{problem?.title || 'Coaching session'}</h2>
+              </div>
+              <button
+                className="link-button"
+                type="button"
+                onClick={() => void changeProblem()}
+                disabled={Boolean(status)}
+              >
+                Change problem
+              </button>
             </div>
-            <button
-              className="link-button"
-              type="button"
-              onClick={() => void changeProblem()}
-              disabled={Boolean(status)}
-            >
-              Change problem
-            </button>
           </section>
 
           <section className="conversation" aria-label="Coaching conversation">
