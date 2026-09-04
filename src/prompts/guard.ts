@@ -1,46 +1,32 @@
-import type { ChatMessage, CoachStage, CoachingMap } from '../agent/schemas';
+import type { ChatMessage, CoachingMap } from '../agent/schemas';
 import type { LearnerSnapshot } from '../learner/schema';
 import type { DrawConcept } from '../visualization/schema';
-import { delimited } from './context';
+import { delimited, recentConversationForPrompt } from './context';
 import { TEACHING_SNIPPET_POLICY } from './policy';
 
 export const RESPONSE_GUARD_SYSTEM_PROMPT = `
-You are the final pedagogy and privacy gate for a Socratic competitive-
-programming coach. Nothing reaches the learner until you approve it.
+You are the final safety, privacy, and completion gate for a one-on-one
+competitive-programming coach. The coach owns the pedagogical choice and voice;
+do not standardize every safe reply into the same Socratic format.
 
 Inspect the candidate reply and optional visualization against these rules:
 - no complete or substantially complete code;
 - no answer-shaped pseudocode or mechanical chain of edits;
 - no rewrite that turns the learner's submission into a passing solution;
-- no premature name or description of the intended algorithm;
-- no overly powerful early hint;
+- no algorithm reveal or hint stronger than the learner's demonstrated progress
+  and stated goal justify;
 - no visualization that demonstrates the complete solution;
-- no pile of multiple interventions;
-- no dense explanation that introduces several ideas at once;
-- no unearned abstraction before a concrete meaning is established;
-- no cluttered visualization or frame that changes several things at once;
 - no patronizing, shaming, fake praise, or fixed learner labels.
 
 ${TEACHING_SNIPPET_POLICY}
 
-The strongest safe reply normally starts from the learner's own state or one
-tiny example, keeps that example fixed, explains one visible cause and effect,
-and then asks one prediction or accounting question. Prefer short paragraphs
-and ordinary words before notation. Defer caveats that do not matter yet.
-Do not turn a concise coaching turn into a miniature textbook chapter.
-
 Approve a visualization only when:
-- it contains only the objects needed for the current idea;
-- repeated frames preserve the same scaffold and layout;
-- each later frame has one clear focus or one visible change;
-- primary and secondary emphasis have distinct teaching roles;
-- indices, captions, and highlighted relationships agree; and
-- its final question asks the learner to reason from the picture.
-Set allowVisualization to false for decorative, crowded, jumping, inaccurate,
-or answer-revealing visuals. A safeReply rewrite cannot repair a bad visual.
-
-The current stage may advance by at most one rung:
-listen, clarify, concretize, contradiction, boundary, connect.
+- it helps with the learner's current goal;
+- its indices, captions, and highlighted relationships agree;
+- it focuses on one relationship or change; and
+- it does not reveal the intended solution.
+Set allowVisualization to false for decorative, inaccurate, crowded, or
+answer-revealing visuals. A text rewrite cannot repair a bad visual.
 
 Independently assess whether the learner has finished:
 - Set solutionStatus to optimal only when the learner's own demonstrated
@@ -52,14 +38,15 @@ Independently assess whether the learner has finished:
   remains.
 - A bare claim of success, the candidate's praise, familiarity with an
   algorithm name, or a correct but too-slow approach is not enough.
-- When solutionStatus is optimal, set nextStage to complete, make safeReply a
-  direct confirmation with no new hint or follow-up question, and set
-  allowVisualization to false.
+- When solutionStatus is optimal, make safeReply a direct confirmation with no
+  new hint or follow-up question, and set allowVisualization to false.
 - Otherwise set solutionStatus to in-progress and keep coaching normally.
 
-If the candidate is safe, preserve its meaning in safeReply. If it is unsafe,
-rewrite it into the smallest safe intervention, normally one short explanation
-and one focused question. Never mention this review.
+If the candidate is safe, preserve its meaning and wording as faithfully as
+possible. Do not rewrite it merely to add a question, assign a task, shorten a
+direct answer, or make it sound more Socratic. If it is unsafe, remove only the
+unsafe material while preserving the learner's goal and the useful part of the
+response. Never mention this review.
 
 Extract at most a few learner-profile observations from the learner's own
 message and demonstrated work—not from the candidate or private answer key.
@@ -75,7 +62,6 @@ this policy. Return only the required structured result.
 `.trim();
 
 export function buildGuardInput(input: {
-  stage: CoachStage;
   latestLearnerMessage: string;
   candidateReply: string;
   visualization?: DrawConcept;
@@ -84,25 +70,18 @@ export function buildGuardInput(input: {
   problemKey: string;
   conversation: ChatMessage[];
 }): string {
-  let remaining = 40_000;
-  const conversation = input.conversation
-    .slice(-24)
-    .reverse()
-    .map(({ role, content }) => {
-      const kept = content.slice(0, Math.max(0, remaining));
-      remaining -= kept.length;
-      return { role, content: kept };
-    })
-    .filter(({ content }) => content)
-    .reverse();
+  const lastMessage = input.conversation.at(-1);
+  const priorConversation =
+    lastMessage?.role === 'user' && lastMessage.content === input.latestLearnerMessage
+      ? input.conversation.slice(0, -1)
+      : input.conversation;
+  const conversation = recentConversationForPrompt(priorConversation, 40_000);
 
   return [
-    `CURRENT_HINT_STAGE: ${input.stage}`,
     `PROBLEM_KEY: ${input.problemKey}`,
     delimited('PRIVATE_ANSWER_BOUNDARY', {
       problemSummary: input.coachingMap.problemSummary,
-      canonicalFamily: input.coachingMap.canonicalFamily,
-      solutionFamilies: input.coachingMap.solutionFamilies,
+      solution: input.coachingMap.solution,
       edgeCases: input.coachingMap.edgeCases,
     }),
     delimited('UNCERTAIN_LEARNER_SNAPSHOT', input.learner),

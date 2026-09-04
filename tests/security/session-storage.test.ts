@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EMPTY_SESSION_USAGE } from '../../src/agent/usage';
 import { sessionFixture } from '../fixtures/domain';
 
 const mocks = vi.hoisted(() => {
@@ -68,17 +67,41 @@ describe('ephemeral coaching-session storage', () => {
     expect(await getActiveSession()).toMatchObject({ id: 'newer' });
   });
 
-  it('backfills usage for sessions saved before accounting was added', async () => {
-    const legacy = Object.fromEntries(
-      Object.entries(sessionFixture).filter(([key]) => key !== 'usage'),
+  it('keeps valid sessions when another stored entry is corrupt', async () => {
+    mocks.values.set('socratic-coach:sessions', {
+      [sessionFixture.id]: sessionFixture,
+      broken: { version: 'not-a-session' },
+    });
+    mocks.values.set('socratic-coach:active-session', sessionFixture.id);
+
+    expect(await getActiveSession()).toEqual(sessionFixture);
+  });
+
+  it('migrates legacy hint stages to a simple completion flag', async () => {
+    const current = Object.fromEntries(
+      Object.entries(sessionFixture).filter(([key]) => key !== 'completed'),
+    );
+    const legacyMap = Object.fromEntries(
+      Object.entries(sessionFixture.coachingMap).filter(([key]) => key !== 'solution'),
     );
     mocks.values.set('socratic-coach:sessions', {
-      [sessionFixture.id]: legacy,
+      [sessionFixture.id]: {
+        ...current,
+        version: 1,
+        stage: 'complete',
+        coachingMap: {
+          ...legacyMap,
+          canonicalFamily: sessionFixture.coachingMap.solution.name,
+          solutionFamilies: [sessionFixture.coachingMap.solution],
+        },
+      },
     });
     mocks.values.set('socratic-coach:active-session', sessionFixture.id);
 
     expect(await getActiveSession()).toMatchObject({
-      usage: EMPTY_SESSION_USAGE,
+      version: 2,
+      completed: true,
+      coachingMap: { solution: sessionFixture.coachingMap.solution },
     });
   });
 });

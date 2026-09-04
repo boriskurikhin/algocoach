@@ -4,8 +4,8 @@ import { SOCRATIC_COACH_SYSTEM_PROMPT, buildCoachInput } from '../prompts/coach'
 import type { ExtensionSettings } from '../storage/local';
 import { DrawConceptSchema, type DrawConcept } from '../visualization/schema';
 import { requestModelResponse } from './openai-client';
-import { COACH_RESPONSE_MAX_OUTPUT_TOKENS, type CoachingSession } from './schemas';
-import type { SessionUsage } from './usage';
+import { reasoningPlanForProblem } from './reasoning';
+import type { CoachingSession } from './schemas';
 
 const drawConceptTool = zodResponsesFunction({
   name: 'draw_concept',
@@ -19,17 +19,16 @@ interface CoachCandidate {
   visualization?: DrawConcept;
 }
 
-export async function draftCoachResponse(
-  session: CoachingSession,
-  learner: LearnerSnapshot,
-  settings: ExtensionSettings,
-  onActivity?: () => void,
-  signal?: AbortSignal,
-  onUsage?: (usage: SessionUsage) => void,
-): Promise<CoachCandidate> {
+export async function draftCoachResponse(input: {
+  session: CoachingSession;
+  learner: LearnerSnapshot;
+  settings: ExtensionSettings;
+  signal?: AbortSignal;
+}): Promise<CoachCandidate> {
+  const { session, learner, settings } = input;
+  const reasoning = reasoningPlanForProblem(session.problem, 'coach');
   const response = await requestModelResponse(
     settings,
-    onActivity,
     {
       instructions: SOCRATIC_COACH_SYSTEM_PROMPT,
       input: buildCoachInput(session, learner),
@@ -37,11 +36,12 @@ export async function draftCoachResponse(
       tool_choice: 'auto',
       parallel_tool_calls: false,
       text: { verbosity: 'low' },
-      max_output_tokens: COACH_RESPONSE_MAX_OUTPUT_TOKENS,
+      max_output_tokens: reasoning.maxOutputTokens,
     },
     {
-      signal,
-      onUsage,
+      signal: input.signal,
+      model: reasoning.model,
+      reasoningEffort: reasoning.effort,
       promptCacheKey: `socratic-coach:coach:${session.id}`,
     },
   );
@@ -56,10 +56,10 @@ export async function draftCoachResponse(
     }
   }
 
-  const reply =
-    response.output_text.trim() ||
-    visualization?.question ||
-    'What do you predict should happen in the smallest example?';
+  const reply = response.output_text.trim() || visualization?.question;
+  if (!reply) {
+    throw new Error('The coach returned an empty response. Try again.');
+  }
 
   return {
     reply,

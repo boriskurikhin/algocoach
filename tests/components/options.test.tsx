@@ -43,19 +43,17 @@ describe('settings page', () => {
     });
   });
 
-  it('discloses local-key limits and tests a newly saved key', async () => {
+  it('keeps connection setup simple and tests a newly saved key', async () => {
     render(<App />);
 
-    expect(await screen.findByRole('heading', { name: 'OpenAI' })).toBeInTheDocument();
-    expect(screen.getByText(/recoverable by someone/i)).toBeInTheDocument();
-    expect(screen.getByText(/Standard \(half the price of Fast\)/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Connection' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/stored in this browser profile/i)).toBeInTheDocument();
     expect(screen.getByText(/does not assign intelligence/i)).toBeInTheDocument();
     expect(
-      Array.from(
-        (screen.getByLabelText('Reasoning effort') as HTMLSelectElement).options,
-        ({ value }) => value,
-      ),
-    ).toEqual(['high', 'xhigh', 'max']);
+      screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|reasoning ceiling)\b/i),
+    ).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('API key'), {
       target: { value: 'sk-user-owned' },
@@ -63,7 +61,7 @@ describe('settings page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save and test' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/OpenAI accepted the key/i)).toBeInTheDocument();
+      expect(screen.getByText(/The key works/i)).toBeInTheDocument();
     });
     expect(mocks.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({

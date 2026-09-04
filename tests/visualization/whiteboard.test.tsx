@@ -22,6 +22,10 @@ describe('animated whiteboard', () => {
         (node) => node.textContent,
       ),
     ).toEqual(['1', '2', '3', '4', '5', '6']);
+    expect(container.querySelector('.visual-layer-content')).toHaveAttribute(
+      'transform',
+      'translate(0 28)',
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(screen.getByText('Five are used and one remains.')).toBeInTheDocument();

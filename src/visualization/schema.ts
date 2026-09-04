@@ -11,7 +11,12 @@ const VisualIndexSchema = z.number().int().nonnegative();
 const ArrayRangeSchema = z.object({
   start: VisualIndexSchema.describe('Inclusive displayed index where the range starts'),
   end: VisualIndexSchema.describe('Inclusive displayed index where the range ends'),
-  label: z.string().max(40).describe('Short meaning or arithmetic for this range'),
+  label: z
+    .string()
+    .max(40)
+    .describe(
+      'Short self-contained plain-language label, such as "Layer 1"; avoid unexplained symbols or compressed formulas',
+    ),
   state: VisualStateSchema,
 });
 
@@ -19,7 +24,12 @@ const ArrayPrimitiveSchema = z
   .object({
     type: z.literal('array'),
     id: z.string().min(1).max(80),
-    label: z.string().max(120).describe('Short row label; use an empty string if none'),
+    label: z
+      .string()
+      .max(120)
+      .describe(
+        'Short self-contained row heading; use an empty string if none and avoid unexplained notation',
+      ),
     indexStart: z
       .union([z.literal(0), z.literal(1)])
       .nullable()
@@ -158,7 +168,9 @@ export const DrawConceptSchema = z.object({
     .string()
     .min(1)
     .max(300)
-    .describe('One focused prediction the learner can answer from the figure'),
+    .describe(
+      'One self-contained prediction that names exactly what the learner should answer from the figure',
+    ),
   frames: z
     .array(VisualFrameSchema)
     .min(1)

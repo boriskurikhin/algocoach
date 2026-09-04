@@ -1,8 +1,8 @@
 # Socratic Algo Coach
 
 A local-first Chrome side-panel extension for competitive-programming practice.
-It studies the active problem before the conversation begins, then gives the
-smallest useful question without supplying the solution.
+It studies the active problem before the conversation begins, asks what the
+learner wants from the session, and adapts without supplying the solution.
 
 Read [`MANIFESTO.md`](MANIFESTO.md) before changing the coaching behavior. The
 manifesto is the product contract.
@@ -16,7 +16,8 @@ manifesto is the product contract.
 - Uses a conservative semantic fallback for other problem-setting sites.
 - Lets the learner paste a statement when page recognition is uncertain.
 - Privately builds a solution-aware coaching map with GPT-5.6 Sol.
-- Runs a separate pedagogy gate before any response reaches the learner.
+- Runs a separate safety and completion gate before any response reaches the
+  learner.
 - Recognizes when the learner has demonstrated an optimal solution, confirms
   it explicitly, and closes the coaching session to further hints.
 - Refuses complete code, answer-shaped pseudocode, passing rewrites, and
@@ -69,6 +70,9 @@ The coach uses a slow ladder:
 5. name the boundary of the missing idea;
 6. connect knowledge the learner has already demonstrated.
 
+The ladder guides each response; it is not exposed or persisted as session
+state.
+
 There is no final “give me the answer” rung. A determined user can inspect an
 open-source extension, so this is a pedagogical guardrail rather than an
 anti-cheating security boundary.
@@ -78,16 +82,20 @@ an independent guard/rewrite. Starting a problem uses an additional private
 analysis response. This improves restraint but increases API cost and latency.
 The user pays OpenAI directly under their own account.
 
-Requests use standard processing instead of the 2×-priced Fast tier; the model,
-reasoning settings, and coaching inputs are unchanged, but responses may arrive
-more slowly. Stable per-session cache keys improve reuse of repeated prompt
-prefixes without removing coaching context.
+Requests use standard processing instead of the 2×-priced Fast tier. Reasoning
+effort and output budgets scale from extracted site difficulty or the private
+Codeforces-equivalent estimate. Easy, Bronze, and roughly ≤1200 problems use
+GPT-5.6 Luna at low effort; problems through 1900 use Terra; and harder problems
+use Sol. Unrated problems start with the conservative Terra/medium analysis
+tier, then use that analysis's estimate for coaching. Problems rated 2500+ use
+xhigh, and 3000+ problems use max. Stable cache keys improve reuse of repeated
+prompt prefixes.
 
-Hard problems get larger reasoning/output budgets: 64k tokens for the private
-analysis, 48k for a coaching draft, and 24k for the safety pass. Once OpenAI
-accepts a streamed model step, the extension lets it finish instead of imposing
-an additional wall-clock cutoff. The learner can stop it explicitly or close
-the panel to abort the request.
+Maximum reasoning/output budgets remain 64k tokens for private analysis, 48k
+for a coaching draft, and 24k for the safety pass. Easier tiers receive smaller
+caps. Once OpenAI accepts a streamed model step, the extension lets it finish
+instead of imposing an additional wall-clock cutoff. The learner can stop it
+explicitly or close the panel to abort the request.
 
 ## Learner memory
 
@@ -113,7 +121,7 @@ Requirements:
 
 - Node.js 22 or newer;
 - Chrome 116 or newer;
-- an OpenAI API key with access to GPT-5.6 Sol.
+- an OpenAI API key with access to GPT-5.6 Luna, Terra, and Sol.
 
 ```sh
 npm install
@@ -180,7 +188,7 @@ Important locations:
 
 - `entrypoints/background.ts` — trusted message, storage, and model boundary;
 - `entrypoints/sidepanel/` — problem and conversation interface;
-- `entrypoints/options/` — key, reasoning, privacy, and profile controls;
+- `entrypoints/options/` — key, privacy, and profile controls;
 - `src/extraction/` — adapters and generic recognition;
 - `src/agent/` — private analysis, response drafting, and guard;
 - `src/prompts/` — coaching contracts and trust delimiters;
@@ -226,7 +234,7 @@ submit solutions or verify online-judge results.
 - All extracted data is length-capped and runtime-validated.
 - Model output is buffered until the pedagogy gate approves it.
 - Visualization tools accept only strict declarative primitives.
-- React renders model labels as text; arbitrary HTML and JavaScript are not
+- React renders model-generated labels as text; arbitrary HTML and JavaScript are not
   accepted.
 - The public settings message contains only `hasApiKey`, never the key.
 - Private coaching maps are excluded from side-panel events.

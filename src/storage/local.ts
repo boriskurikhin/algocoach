@@ -5,17 +5,8 @@ import { createEmptyLearnerProfile } from '../learner/update-profile';
 
 const SETTINGS_KEY = 'socratic-coach:settings';
 const PROFILE_KEY = 'socratic-coach:learner-profile';
-const ReasoningEffortSchema = z.preprocess(
-  (value) =>
-    value === 'none' || value === 'low' || value === 'medium' ? 'high' : value,
-  z.enum(['high', 'xhigh', 'max']).default('high'),
-);
-
 export const ExtensionSettingsSchema = z.object({
   apiKey: z.string().trim().max(500).default(''),
-  model: z.literal('gpt-5.6-sol').default('gpt-5.6-sol'),
-  reasoningEffort: ReasoningEffortSchema,
-  reasoningMode: z.enum(['standard', 'pro']).default('standard'),
 });
 
 export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>;
@@ -95,9 +86,6 @@ export async function exportLocalData(): Promise<string> {
     {
       exportedAt: new Date().toISOString(),
       settings: {
-        model: settings.model,
-        reasoningEffort: settings.reasoningEffort,
-        reasoningMode: settings.reasoningMode,
         hasApiKey: Boolean(settings.apiKey),
       },
       learnerProfile,

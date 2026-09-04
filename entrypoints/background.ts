@@ -4,9 +4,7 @@ import { respondToLearner, startCoachingSession } from '../src/agent/orchestrato
 import type { CoachStatus } from '../src/agent/schemas';
 import { extractActiveProblem } from '../src/extraction/run';
 import { applyKnowledgeCorrection } from '../src/learner/update-profile';
-import type { LearnerProfile } from '../src/learner/schema';
 import {
-  ActiveSessionResultSchema,
   CoachClientMessageSchema,
   CoachServerEventSchema,
   RuntimeRequestSchema,
@@ -14,6 +12,7 @@ import {
   toRestorableSession,
   type PublicSettings,
   type RuntimeRequest,
+  type RuntimeResult,
   type RuntimeResponse,
 } from '../src/messaging/schema';
 import {
@@ -28,19 +27,10 @@ import {
   setPersonalizationEnabled,
   type ExtensionSettings,
 } from '../src/storage/local';
-import {
-  clearActiveSession,
-  getActiveSession,
-  getSession,
-} from '../src/storage/session';
+import { clearActiveSession, getActiveSession } from '../src/storage/session';
 
 function publicSettings(settings: ExtensionSettings): PublicSettings {
-  return {
-    hasApiKey: Boolean(settings.apiKey),
-    model: settings.model,
-    reasoningEffort: settings.reasoningEffort,
-    reasoningMode: settings.reasoningMode,
-  };
+  return { hasApiKey: Boolean(settings.apiKey) };
 }
 
 const success = (data: unknown): RuntimeResponse =>
@@ -54,26 +44,28 @@ async function editProfileEntry(
     RuntimeRequest,
     { type: 'profile:remove-entry' | 'profile:set-knowledge' }
   >,
-): Promise<{ profile: LearnerProfile }> {
+): Promise<RuntimeResult<'profile:remove-entry'>> {
   const profile = await getLearnerProfile();
 
-  if (request.type === 'profile:remove-entry') {
-    delete profile[request.dimension][request.key];
-    profile.updatedAt = Date.now();
-  } else {
+  if (request.type === 'profile:set-knowledge') {
     return {
       profile: await saveLearnerProfile(applyKnowledgeCorrection(profile, request)),
     };
   }
 
-  return { profile: await saveLearnerProfile(profile) };
+  const updated = structuredClone(profile);
+  delete updated[request.dimension][request.key];
+  updated.updatedAt = Date.now();
+  return { profile: await saveLearnerProfile(updated) };
 }
 
-const handlers: {
+type RuntimeHandlers = {
   [Type in RuntimeRequest['type']]: (
     request: Extract<RuntimeRequest, { type: Type }>,
-  ) => Promise<unknown>;
-} = {
+  ) => Promise<RuntimeResult<Type>>;
+};
+
+const handlers: RuntimeHandlers = {
   'settings:get': async () => publicSettings(await getSettings()),
   'settings:save': async (request) =>
     publicSettings(await saveSettings(request.settings)),
@@ -85,13 +77,13 @@ const handlers: {
   'problem:extract': () => extractActiveProblem(),
   'session:get-active': async () => {
     const session = await getActiveSession();
-    return ActiveSessionResultSchema.parse({
+    return {
       session: session ? toRestorableSession(session) : null,
-    });
+    };
   },
   'session:clear-active': async (request) => {
     await clearActiveSession(request.sessionId);
-    return {};
+    return null;
   },
   'profile:get': async () => ({ profile: await getLearnerProfile() }),
   'profile:set-enabled': async (request) => ({
@@ -103,26 +95,10 @@ const handlers: {
   'profile:set-knowledge': editProfileEntry,
 };
 
-/**
- * Reports coaching stages and rate-limits repeated model activity updates.
- */
-function createStatusReporter(post: (event: unknown) => void) {
-  let current = { status: 'studying' as CoachStatus, label: 'Working…' };
-  let lastActivityAt = 0;
-
-  return {
-    onStatus: (status: CoachStatus, label: string): void => {
-      current = { status, label };
-      lastActivityAt = Date.now();
-      post({ type: 'coach:status', status, label });
-    },
-    onModelActivity: (): void => {
-      const now = Date.now();
-      if (now - lastActivityAt < 10_000) return;
-      lastActivityAt = now;
-      post({ type: 'coach:status', ...current });
-    },
-  };
+function handleRuntimeRequest<Type extends RuntimeRequest['type']>(
+  request: Extract<RuntimeRequest, { type: Type }>,
+): Promise<RuntimeResult<Type>> {
+  return handlers[request.type](request);
 }
 
 export default defineBackground(() => {
@@ -154,10 +130,7 @@ export default defineBackground(() => {
     if (!parsed.success) return failure('The extension received an invalid request.');
 
     try {
-      const handle = handlers[parsed.data.type] as (
-        request: RuntimeRequest,
-      ) => Promise<unknown>;
-      return success(await handle(parsed.data));
+      return success(await handleRuntimeRequest(parsed.data));
     } catch (error) {
       return failure(safeOpenAIError(error));
     }
@@ -212,14 +185,14 @@ export default defineBackground(() => {
       void (async () => {
         try {
           const settings = await getSettings();
-          const { onStatus, onModelActivity } = createStatusReporter(post);
+          const onStatus = (status: CoachStatus, label: string) =>
+            post({ type: 'coach:status', status, label });
 
           if (requestMessage.type === 'session:start') {
             const session = await startCoachingSession({
               problem: requestMessage.problem,
               settings,
               onStatus,
-              onModelActivity,
               signal: request.signal,
             });
             if (request.signal.aborted) return;
@@ -235,33 +208,20 @@ export default defineBackground(() => {
             content: requestMessage.content,
             settings,
             onStatus,
-            onModelActivity,
             signal: request.signal,
           });
           if (request.signal.aborted) return;
-          for (const chunk of message.content.match(/[\s\S]{1,36}/g) ?? [
-            message.content,
-          ]) {
-            post({ type: 'coach:chunk', sessionId: session.id, chunk });
-          }
           post({
             type: 'coach:reply',
             sessionId: session.id,
             message,
-            stage: session.stage,
-            usage: session.usage,
+            completed: session.completed,
           });
         } catch (error) {
           if (!request.signal.aborted) {
-            const failedSession =
-              requestMessage.type === 'session:user-message'
-                ? await getSession(requestMessage.sessionId).catch(() => null)
-                : null;
-            if (request.signal.aborted) return;
             post({
               type: 'coach:error',
               message: safeOpenAIError(error),
-              ...(failedSession ? { usage: failedSession.usage } : {}),
             });
           }
         } finally {

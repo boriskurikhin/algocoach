@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const PAGE_ACCESS_DENIED_MESSAGE =
+  'Page access was not granted. Click the extension icon on this tab and try again.';
+
 const ProblemSiteSchema = z.enum([
   'dmoj',
   'codeforces',
@@ -51,5 +54,11 @@ export const ProblemContextSchema = z.object({
   warnings: z.array(z.string().max(500)).max(20).default([]),
 });
 
+export const ActiveProblemResultSchema = z.object({
+  context: ProblemContextSchema,
+  likelyProblem: z.boolean(),
+});
+
 export type ProblemSite = z.infer<typeof ProblemSiteSchema>;
 export type ProblemContext = z.infer<typeof ProblemContextSchema>;
+export type ActiveProblemResult = z.infer<typeof ActiveProblemResultSchema>;

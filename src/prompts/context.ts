@@ -1,14 +1,17 @@
+import type { ChatMessage } from '../agent/schemas';
 import type { ProblemContext } from '../extraction/schema';
 
 const MAX_PROMPT_STATEMENT_CHARS = 40_000;
+const MAX_PROMPT_MESSAGES = 24;
+
+type PromptMessage = Pick<ChatMessage, 'role' | 'content'>;
 
 /**
  * Fences one region of prompt input so the model can tell trusted instructions
  * from untrusted page text, learner text, and the private answer key.
  */
 export function delimited(name: string, value: unknown): string {
-  const body = typeof value === 'string' ? value : JSON.stringify(value);
-  return `${name}_START\n${body}\n${name}_END`;
+  return `${name}_START\n${JSON.stringify(value) ?? 'null'}\n${name}_END`;
 }
 
 export function problemForPrompt(problem: ProblemContext) {
@@ -30,4 +33,21 @@ export function problemForPrompt(problem: ProblemContext) {
         : undefined,
     tags: problem.tags,
   };
+}
+
+export function recentConversationForPrompt(
+  messages: readonly PromptMessage[],
+  maxChars: number,
+): PromptMessage[] {
+  let remaining = maxChars;
+  return messages
+    .slice(-MAX_PROMPT_MESSAGES)
+    .reverse()
+    .map(({ role, content }) => {
+      const kept = content.slice(0, Math.max(0, remaining));
+      remaining -= kept.length;
+      return { role, content: kept };
+    })
+    .filter(({ content }) => content)
+    .reverse();
 }

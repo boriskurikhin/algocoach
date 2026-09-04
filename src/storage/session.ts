@@ -4,14 +4,20 @@ import { CoachingSessionSchema, type CoachingSession } from '../agent/schemas';
 
 const SESSIONS_KEY = 'socratic-coach:sessions';
 const ACTIVE_SESSION_KEY = 'socratic-coach:active-session';
-const SessionsSchema = z.record(z.string(), CoachingSessionSchema);
 const ActiveSessionIdSchema = z.string().min(1).max(100).nullable();
 const MAX_SESSIONS = 10;
 
 async function readSessions(): Promise<Record<string, CoachingSession>> {
   const result = await browser.storage.session.get(SESSIONS_KEY);
-  const parsed = SessionsSchema.safeParse(result[SESSIONS_KEY]);
-  return parsed.success ? parsed.data : {};
+  const stored = result[SESSIONS_KEY];
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+
+  return Object.fromEntries(
+    Object.entries(stored).flatMap(([id, value]) => {
+      const parsed = CoachingSessionSchema.safeParse(value);
+      return parsed.success ? [[id, parsed.data]] : [];
+    }),
+  );
 }
 
 const newestFirst = (sessions: Record<string, CoachingSession>) =>

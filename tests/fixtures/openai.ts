@@ -4,16 +4,10 @@ import type { ExtensionSettings } from '../../src/storage/local';
 
 export const settingsFixture: ExtensionSettings = {
   apiKey: 'test-only-key',
-  model: 'gpt-5.6-sol',
-  reasoningEffort: 'high',
-  reasoningMode: 'standard',
 };
 
 export const publicSettingsFixture: PublicSettings = {
   hasApiKey: false,
-  model: 'gpt-5.6-sol',
-  reasoningEffort: 'high',
-  reasoningMode: 'standard',
 };
 
 export interface ResponseMocks {

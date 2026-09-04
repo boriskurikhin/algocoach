@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   KnowledgeLevelSchema,
-  LearnerProfileSchema,
   type KnowledgeEstimate,
   type KnowledgeLevel,
   type LearnerProfile,
   type TendencyEstimate,
 } from '../../src/learner/schema';
-import { COACH_PROCESSING_LABEL } from '../../src/agent/schemas';
 import { errorMessage, sendExtensionRequest } from '../../src/messaging/client';
 import type { PublicSettings, RuntimeRequest } from '../../src/messaging/schema';
-import type { ExtensionSettings } from '../../src/storage/local';
 import './options.css';
 
 /** The profile requests that answer with a replacement profile. */
@@ -34,10 +31,6 @@ type KnowledgeDimension = Extract<
   { type: 'profile:set-knowledge' }
 >['dimension'];
 type TendencyDimension = Exclude<AnyDimension, KnowledgeDimension>;
-
-interface ProfileResponse {
-  profile: LearnerProfile;
-}
 
 const knowledgeLevels = KnowledgeLevelSchema.options;
 
@@ -90,10 +83,6 @@ export default function App() {
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [profile, setProfile] = useState<LearnerProfile | null>(null);
   const [apiKey, setApiKey] = useState('');
-  const [reasoningEffort, setReasoningEffort] =
-    useState<ExtensionSettings['reasoningEffort']>('high');
-  const [reasoningMode, setReasoningMode] =
-    useState<ExtensionSettings['reasoningMode']>('standard');
   const [declaredDimension, setDeclaredDimension] =
     useState<KnowledgeDimension>('languages');
   const [declaredKey, setDeclaredKey] = useState('');
@@ -105,13 +94,11 @@ export default function App() {
   const load = useCallback(async () => {
     try {
       const [nextSettings, profileResponse] = await Promise.all([
-        sendExtensionRequest<PublicSettings>({ type: 'settings:get' }),
-        sendExtensionRequest<ProfileResponse>({ type: 'profile:get' }),
+        sendExtensionRequest({ type: 'settings:get' }),
+        sendExtensionRequest({ type: 'profile:get' }),
       ]);
       setSettings(nextSettings);
-      setReasoningEffort(nextSettings.reasoningEffort);
-      setReasoningMode(nextSettings.reasoningMode);
-      setProfile(LearnerProfileSchema.parse(profileResponse.profile));
+      setProfile(profileResponse.profile);
     } catch (caught) {
       setError(errorMessage(caught, 'Could not load settings.'));
     }
@@ -123,7 +110,7 @@ export default function App() {
     void load();
   }, [load]);
 
-  const runSettingsAction = async (fallback: string, action: () => Promise<void>) => {
+  const runAction = async (fallback: string, action: () => Promise<void>) => {
     setBusy(true);
     setError('');
     setNotice('');
@@ -137,33 +124,27 @@ export default function App() {
   };
 
   const save = (thenTest = false) =>
-    runSettingsAction('Could not save settings.', async () => {
+    runAction('Could not save settings.', async () => {
       setSettings(
-        await sendExtensionRequest<PublicSettings>({
+        await sendExtensionRequest({
           type: 'settings:save',
-          settings: {
-            reasoningEffort,
-            reasoningMode,
-            ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
-          },
+          settings: apiKey.trim() ? { apiKey: apiKey.trim() } : {},
         }),
       );
       setApiKey('');
       setNotice('Settings saved locally.');
 
       if (thenTest) {
-        await sendExtensionRequest<{ connected: boolean }>({
+        await sendExtensionRequest({
           type: 'settings:test-key',
         });
-        setNotice('Settings saved. OpenAI accepted the key.');
+        setNotice('Settings saved. The key works.');
       }
     });
 
   const removeKey = () =>
-    runSettingsAction('Could not remove the key.', async () => {
-      setSettings(
-        await sendExtensionRequest<PublicSettings>({ type: 'settings:remove-key' }),
-      );
+    runAction('Could not remove the key.', async () => {
+      setSettings(await sendExtensionRequest({ type: 'settings:remove-key' }));
       setApiKey('');
       setNotice('The API key was removed.');
     });
@@ -171,12 +152,15 @@ export default function App() {
   const mutateProfile = async (
     request: ProfileMutation,
     fallback = 'Could not update the learner profile.',
-  ) => {
+  ): Promise<boolean> => {
+    setError('');
     try {
-      const response = await sendExtensionRequest<ProfileResponse>(request);
-      setProfile(LearnerProfileSchema.parse(response.profile));
+      const response = await sendExtensionRequest(request);
+      setProfile(response.profile);
+      return true;
     } catch (caught) {
       setError(errorMessage(caught, fallback));
+      return false;
     }
   };
 
@@ -199,23 +183,25 @@ export default function App() {
   const addDeclaredKnowledge = async () => {
     const key = declaredKey.trim().toLowerCase();
     if (!key) return;
-    await setKnowledge(declaredDimension, key, declaredLevel, true);
-    setDeclaredKey('');
+    if (await setKnowledge(declaredDimension, key, declaredLevel, true)) {
+      setDeclaredKey('');
+    }
   };
 
-  const exportData = async () => {
-    const result = await sendExtensionRequest<{ json: string }>({
-      type: 'profile:export',
+  const exportData = () =>
+    runAction('Could not export local data.', async () => {
+      const result = await sendExtensionRequest({
+        type: 'profile:export',
+      });
+      const url = URL.createObjectURL(
+        new Blob([result.json], { type: 'application/json' }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'socratic-algo-coach-data.json';
+      link.click();
+      URL.revokeObjectURL(url);
     });
-    const url = URL.createObjectURL(
-      new Blob([result.json], { type: 'application/json' }),
-    );
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'socratic-algo-coach-data.json';
-    link.click();
-    URL.revokeObjectURL(url);
-  };
 
   const resetProfile = () => {
     if (!window.confirm('Erase every learner-profile estimate?')) return;
@@ -296,20 +282,12 @@ export default function App() {
   return (
     <main className="options-shell">
       <header>
-        <p className="eyebrow">Socratic Algo Coach</p>
         <h1>Settings</h1>
-        <p>
-          Two things live here: your connection to OpenAI and the fallible memory the
-          coach uses to meet you where you are.
-        </p>
       </header>
 
-      <section aria-labelledby="openai-title">
-        <h2 id="openai-title">OpenAI</h2>
-        <p>
-          The key is stored in Chrome extension-local storage. It is recoverable by
-          someone with access to your browser profile, and is sent only to OpenAI.
-        </p>
+      <section aria-labelledby="connection-title">
+        <h2 id="connection-title">Connection</h2>
+        <p>The key is stored in this browser profile.</p>
         <label>
           API key
           <input
@@ -324,43 +302,6 @@ export default function App() {
             }
           />
         </label>
-        <p className="quiet">
-          Model: GPT-5.6 Sol · Processing: {COACH_PROCESSING_LABEL} (half the price of
-          Fast)
-        </p>
-        <div className="split-fields">
-          <label>
-            Reasoning mode
-            <select
-              value={reasoningMode}
-              onChange={(event) =>
-                setReasoningMode(
-                  event.target.value as ExtensionSettings['reasoningMode'],
-                )
-              }
-            >
-              <option value="standard">Standard</option>
-              <option value="pro">Pro</option>
-            </select>
-          </label>
-          <label>
-            Reasoning effort
-            <select
-              value={reasoningEffort}
-              onChange={(event) =>
-                setReasoningEffort(
-                  event.target.value as ExtensionSettings['reasoningEffort'],
-                )
-              }
-            >
-              {['high', 'xhigh', 'max'].map((effort) => (
-                <option key={effort} value={effort}>
-                  {effort}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
         <div className="button-row">
           <button type="button" onClick={() => void save()} disabled={busy}>
             Save locally
@@ -449,7 +390,7 @@ export default function App() {
         {renderTendencies('Helpful coaching styles', 'coachingPreferences')}
 
         <div className="button-row profile-actions">
-          <button type="button" onClick={() => void exportData()}>
+          <button type="button" onClick={() => void exportData()} disabled={busy}>
             Export local data
           </button>
           <button
@@ -460,10 +401,6 @@ export default function App() {
             Reset learner profile
           </button>
         </div>
-        <p className="quiet">
-          Only a small relevant snapshot is sent to OpenAI with a coaching request. Raw
-          evidence and unrelated profile entries stay local.
-        </p>
       </section>
 
       {notice ? (

@@ -1,27 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { browser } from 'wxt/browser';
 import {
-  COACH_PROCESSING_LABEL,
+  COACH_STATUS_LABELS,
   type ChatMessage,
-  type CoachStage,
   type CoachStatus,
 } from '../../src/agent/schemas';
-import {
-  EMPTY_SESSION_USAGE,
-  SESSION_COST_ESTIMATE_NOTE,
-  type SessionUsage,
-} from '../../src/agent/usage';
 import { CoachMascot } from '../../src/components/CoachMascot';
-import {
-  coachMascotMomentForStageChange,
-  deriveCoachMascotState,
-  type CoachMascotMoment,
-} from '../../src/components/coach-mascot-state';
+import { deriveCoachMascotState } from '../../src/components/coach-mascot-state';
 import { MathText } from '../../src/components/MathText';
 import { MessageContent } from '../../src/components/MessageContent';
 import { manualProblemContext } from '../../src/extraction/recognize';
-import type { ActiveProblemResult } from '../../src/extraction/run';
-import type { ProblemContext } from '../../src/extraction/schema';
+import {
+  PAGE_ACCESS_DENIED_MESSAGE,
+  type ActiveProblemResult,
+  type ProblemContext,
+} from '../../src/extraction/schema';
 import {
   hasSiteAccess,
   requestSiteAccess,
@@ -29,7 +22,6 @@ import {
 } from '../../src/extraction/site-access';
 import { errorMessage, sendExtensionRequest } from '../../src/messaging/client';
 import {
-  ActiveSessionResultSchema,
   CoachServerEventSchema,
   type PublicSettings,
   type RestorableSession,
@@ -48,24 +40,23 @@ type CoachPort = ReturnType<typeof browser.runtime.connect>;
 const STATUS_PROGRESS_INTERVAL_MS = 4_000;
 const statusProgress: Record<CoachStatus, readonly string[]> = {
   studying: [
-    'Reading the statement and constraints…',
-    'Separating the core model from edge cases…',
-    'Building a private ladder of safe questions…',
-    'Still studying—hard problems can take a little longer.',
+    'Reading the statement…',
+    'Checking constraints and edge cases…',
+    'Preparing to meet you where you are…',
+    'Still studying this problem…',
   ],
   coaching: [
     'Reading your latest reasoning…',
-    'Looking for the smallest useful mismatch…',
-    'Choosing one question that keeps the work with you…',
-    'Still drafting one careful coaching move.',
+    'Thinking through what would help next…',
+    'Preparing a focused response…',
+    'Still working on your response…',
   ],
   checking: [
-    'Checking against the private answer boundary…',
-    'Making sure the hint advances only one step…',
-    'Removing anything too revealing or overloaded…',
-    'Still checking before anything reaches you.',
+    'Checking that the response stays focused…',
+    'Making sure the key work stays with you…',
+    'Preparing your response…',
+    'Still checking the response…',
   ],
-  'saving-profile': ['Saving only evidence from what you demonstrated…'],
 };
 
 function statusProgressMessage(status: StatusState, now: number): string {
@@ -77,44 +68,12 @@ function statusProgressMessage(status: StatusState, now: number): string {
   return messages[index] ?? messages[0] ?? 'Working…';
 }
 
-function elapsedTime(startedAt: number, now: number): string {
-  const seconds = Math.max(0, Math.floor((now - startedAt) / 1_000));
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
-
 const localMessage = (content: string): ChatMessage => ({
   id: crypto.randomUUID(),
   role: 'user',
   content,
   createdAt: Date.now(),
 });
-
-const compactNumber = new Intl.NumberFormat('en-US', {
-  notation: 'compact',
-  maximumFractionDigits: 1,
-});
-const wholeNumber = new Intl.NumberFormat('en-US');
-
-function estimatedCost(value: number): string {
-  if (value < 0.01) return `$${value.toFixed(4)}`;
-  if (value < 1) return `$${value.toFixed(3)}`;
-  return `$${value.toFixed(2)}`;
-}
-
-function usageDetail(usage: SessionUsage): string {
-  const calls = `${wholeNumber.format(usage.modelCalls)} model ${
-    usage.modelCalls === 1 ? 'call' : 'calls'
-  }`;
-  return [
-    `${wholeNumber.format(usage.inputTokens)} input`,
-    `${wholeNumber.format(usage.cachedInputTokens)} cached`,
-    `${wholeNumber.format(usage.cacheWriteTokens)} cache writes`,
-    `${wholeNumber.format(usage.outputTokens)} output`,
-    `${wholeNumber.format(usage.reasoningTokens)} reasoning`,
-    calls,
-    SESSION_COST_ESTIMATE_NOTE,
-  ].join(' · ');
-}
 
 const codeforcesRanks = [
   { minimum: 3_000, name: 'Legendary Grandmaster', tone: 'legendary-grandmaster' },
@@ -164,43 +123,18 @@ export default function App() {
   const [manualTitle, setManualTitle] = useState('');
   const [manualStatement, setManualStatement] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [stage, setStage] = useState<CoachStage>('listen');
+  const [sessionComplete, setSessionComplete] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [usage, setUsage] = useState<SessionUsage>(EMPTY_SESSION_USAGE);
-  const [draft, setDraft] = useState('');
+  const [clock, setClock] = useState(Date.now);
   const [composer, setComposer] = useState('');
   const [status, setStatus] = useState<StatusState | null>(null);
-  const [statusClock, setStatusClock] = useState(Date.now);
   const [error, setError] = useState('');
-  const [mascotMoment, setMascotMoment] = useState<CoachMascotMoment | null>(null);
   const portRef = useRef<CoachPort | null>(null);
   const connectPortRef = useRef<() => CoachPort | null>(() => null);
   const requestInFlightRef = useRef(false);
-  const stageRef = useRef<CoachStage>('listen');
-  const mascotMomentTimerRef = useRef<number | null>(null);
-
-  const resetMascotMoment = useCallback(() => {
-    if (mascotMomentTimerRef.current !== null) {
-      window.clearTimeout(mascotMomentTimerRef.current);
-      mascotMomentTimerRef.current = null;
-    }
-    setMascotMoment(null);
-  }, []);
-
-  const showMascotMoment = useCallback((moment: CoachMascotMoment) => {
-    if (mascotMomentTimerRef.current !== null) {
-      window.clearTimeout(mascotMomentTimerRef.current);
-    }
-    setMascotMoment(moment);
-    mascotMomentTimerRef.current = window.setTimeout(() => {
-      mascotMomentTimerRef.current = null;
-      setMascotMoment(null);
-    }, 2_600);
-  }, []);
 
   const finishRequest = useCallback(() => {
     requestInFlightRef.current = false;
-    setDraft('');
     setStatus(null);
   }, []);
 
@@ -212,23 +146,18 @@ export default function App() {
     [finishRequest],
   );
 
-  const applySession = useCallback(
-    (session: RestorableSession) => {
-      resetMascotMoment();
-      setSessionId(session.sessionId);
-      setExtraction({ context: session.problem, likelyProblem: true });
-      setStage(session.stage);
-      stageRef.current = session.stage;
-      setMessages(session.messages);
-      setUsage(session.usage);
-      setExtracting(false);
-    },
-    [resetMascotMoment],
-  );
+  const applySession = useCallback((session: RestorableSession) => {
+    setSessionId(session.sessionId);
+    setExtraction({ context: session.problem, likelyProblem: true });
+    setSessionComplete(session.completed);
+    setMessages(session.messages);
+    setClock(Date.now());
+    setExtracting(false);
+  }, []);
 
   const refreshSettings = useCallback(async () => {
     try {
-      const next = await sendExtensionRequest<PublicSettings>({
+      const next = await sendExtensionRequest({
         type: 'settings:get',
       });
       setSettings(next);
@@ -241,7 +170,7 @@ export default function App() {
     setExtracting(true);
     setError('');
     try {
-      const result = await sendExtensionRequest<ActiveProblemResult>({
+      const result = await sendExtensionRequest({
         type: 'problem:extract',
       });
       setExtraction(result);
@@ -257,7 +186,7 @@ export default function App() {
       setExtraction(null);
       setSitePattern(null);
       setManualOpen(true);
-      setNeedsAccess(message.startsWith('Page access was not granted'));
+      setNeedsAccess(message === PAGE_ACCESS_DENIED_MESSAGE);
       setError(message);
     } finally {
       setExtracting(false);
@@ -265,30 +194,38 @@ export default function App() {
   }, []);
 
   const restoreSession = useCallback(async (): Promise<boolean> => {
-    try {
-      const result = ActiveSessionResultSchema.parse(
-        await sendExtensionRequest<unknown>({ type: 'session:get-active' }),
-      );
-      if (!result.session) return false;
+    const result = await sendExtensionRequest({ type: 'session:get-active' });
+    if (!result.session) return false;
 
-      applySession(result.session);
-      return true;
-    } catch {
-      return false;
-    }
+    applySession(result.session);
+    return true;
   }, [applySession]);
 
   const grantSiteAccess = () => {
     if (!sitePattern) return;
-    void requestSiteAccess(sitePattern).then((granted) => {
-      if (granted) setSitePattern(null);
-    });
+    setError('');
+    void requestSiteAccess(sitePattern).then(
+      (granted) => {
+        if (granted) setSitePattern(null);
+      },
+      (caught) => setError(errorMessage(caught, 'Could not grant site access.')),
+    );
   };
 
   // Chrome hides the URL until access exists, so the panel cannot name the site
   // to ask for. Hand the learner Chrome's own per-site control instead.
   const openSiteAccessSettings = () => {
-    void browser.tabs.create({ url: `chrome://extensions/?id=${browser.runtime.id}` });
+    void browser.tabs
+      .create({ url: `chrome://extensions/?id=${browser.runtime.id}` })
+      .catch((caught) =>
+        setError(errorMessage(caught, 'Could not open site access settings.')),
+      );
+  };
+
+  const openSettings = () => {
+    void browser.runtime
+      .openOptionsPage()
+      .catch((caught) => setError(errorMessage(caught, 'Could not open settings.')));
   };
 
   useEffect(() => {
@@ -296,7 +233,12 @@ export default function App() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshSettings();
     void (async () => {
-      if (!(await restoreSession())) await extract();
+      try {
+        if (!(await restoreSession())) await extract();
+      } catch (caught) {
+        setExtracting(false);
+        setError(errorMessage(caught, 'Could not restore the coaching session.'));
+      }
     })();
 
     const onVisible = () => {
@@ -307,15 +249,6 @@ export default function App() {
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [extract, refreshSettings, restoreSession]);
-
-  useEffect(
-    () => () => {
-      if (mascotMomentTimerRef.current !== null) {
-        window.clearTimeout(mascotMomentTimerRef.current);
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     let disposed = false;
@@ -333,33 +266,23 @@ export default function App() {
 
       if (event.type === 'coach:status') {
         const now = Date.now();
-        setStatusClock(now);
+        setClock(now);
         setStatus((current) => ({
           kind: event.status,
           label: event.label,
-          startedAt:
-            current?.kind === event.status && current.startedAt
-              ? current.startedAt
-              : now,
+          startedAt: current?.kind === event.status ? current.startedAt : now,
         }));
       } else if (event.type === 'session:ready') {
         finishRequest();
         applySession(event);
-      } else if (event.type === 'coach:chunk') {
-        setDraft((value) => value + event.chunk);
       } else if (event.type === 'coach:reply') {
-        const previousStage = stageRef.current;
         finishRequest();
         setMessages((value) => [...value, event.message]);
-        setStage(event.stage);
-        stageRef.current = event.stage;
-        setUsage(event.usage);
-        showMascotMoment(coachMascotMomentForStageChange(previousStage, event.stage));
+        setSessionComplete(event.completed);
       } else if (event.type === 'coach:canceled') {
         finishRequest();
         setError('');
       } else {
-        if (event.usage) setUsage(event.usage);
         failRequest(event.message);
       }
     };
@@ -409,11 +332,10 @@ export default function App() {
       if (portRef.current === connection?.port) portRef.current = null;
       connection?.port.disconnect();
     };
-  }, [applySession, failRequest, finishRequest, showMascotMoment]);
+  }, [applySession, failRequest, finishRequest]);
 
   useEffect(() => {
     if (!status) return;
-    const clock = window.setInterval(() => setStatusClock(Date.now()), 1_000);
     const keepalive = window.setInterval(() => {
       try {
         portRef.current?.postMessage({ type: 'coach:keepalive' });
@@ -421,13 +343,19 @@ export default function App() {
         // onDisconnect reports the lost coaching request.
       }
     }, 15_000);
-    return () => {
-      window.clearInterval(clock);
-      window.clearInterval(keepalive);
-    };
+    return () => window.clearInterval(keepalive);
   }, [status]);
 
-  const postCoachMessage = (message: unknown): boolean => {
+  useEffect(() => {
+    if (!status) return;
+    const interval = window.setInterval(
+      () => setClock(Date.now()),
+      STATUS_PROGRESS_INTERVAL_MS,
+    );
+    return () => window.clearInterval(interval);
+  }, [status]);
+
+  const postCoachMessage = (message: unknown): void => {
     const tryPost = (): boolean => {
       const port = portRef.current ?? connectPortRef.current();
       if (!port) return false;
@@ -440,11 +368,11 @@ export default function App() {
       }
     };
 
-    if (tryPost() || tryPost()) return true;
+    if (tryPost()) return;
+    if (tryPost()) return;
     failRequest(
       'Could not reconnect to the coach. Reopen the panel; your conversation will be restored.',
     );
-    return false;
   };
 
   const cancelRequest = () => {
@@ -454,19 +382,17 @@ export default function App() {
 
   const startSession = (problem: ProblemContext) => {
     if (!settings?.hasApiKey) {
-      void browser.runtime.openOptionsPage();
+      openSettings();
       return;
     }
     const now = Date.now();
-    resetMascotMoment();
-    stageRef.current = 'listen';
     setError('');
+    setSessionComplete(false);
     setMessages([]);
-    setUsage({ ...EMPTY_SESSION_USAGE });
-    setStatusClock(now);
+    setClock(now);
     setStatus({
       kind: 'studying',
-      label: 'Studying the problem before we talk…',
+      label: COACH_STATUS_LABELS.studying,
       startedAt: now,
     });
     requestInFlightRef.current = true;
@@ -483,16 +409,15 @@ export default function App() {
 
   const submit = () => {
     const content = composer.trim();
-    if (!content || !sessionId || status || stage === 'complete') return;
+    if (!content || !sessionId || status || sessionComplete) return;
     const now = Date.now();
     setError('');
     setMessages((value) => [...value, localMessage(content)]);
     setComposer('');
-    setDraft('');
-    setStatusClock(now);
+    setClock(now);
     setStatus({
       kind: 'coaching',
-      label: 'Choosing the smallest useful question…',
+      label: COACH_STATUS_LABELS.coaching,
       startedAt: now,
     });
     requestInFlightRef.current = true;
@@ -513,8 +438,7 @@ export default function App() {
       });
       setSessionId(null);
       setMessages([]);
-      setUsage({ ...EMPTY_SESSION_USAGE });
-      resetMascotMoment();
+      setSessionComplete(false);
       finishRequest();
     } catch (caught) {
       setError(errorMessage(caught, 'Could not close the coaching session.'));
@@ -523,18 +447,14 @@ export default function App() {
 
   const problem = extraction?.context;
   const codeforcesRating = problem?.codeforcesRating;
-  const sessionComplete = stage === 'complete';
-  const sessionUsageDetail = usage.modelCalls ? usageDetail(usage) : '';
   const mascotState = deriveCoachMascotState({
     sessionId,
     extracting,
     status: status?.kind ?? null,
-    draft,
     composer,
     error,
-    stage,
+    completed: sessionComplete,
     messageCount: messages.length,
-    moment: mascotMoment,
   });
 
   return (
@@ -542,25 +462,18 @@ export default function App() {
       <header className="panel-header">
         <div className="brand-lockup">
           <CoachMascot state={mascotState} />
-          <div>
-            <p className="eyebrow">Socratic</p>
-            <h1>Algo Coach</h1>
-          </div>
+          <h1>Algo Coach</h1>
         </div>
-        <button
-          className="link-button"
-          type="button"
-          onClick={() => void browser.runtime.openOptionsPage()}
-        >
+        <button className="link-button" type="button" onClick={openSettings}>
           Settings
         </button>
       </header>
 
       {!settings?.hasApiKey && settings !== null ? (
         <section className="notice" aria-labelledby="setup-title">
-          <h2 id="setup-title">Add your OpenAI key</h2>
-          <p>Your key stays in extension-local storage and is sent only to OpenAI.</p>
-          <button type="button" onClick={() => void browser.runtime.openOptionsPage()}>
+          <h2 id="setup-title">Add your API key</h2>
+          <p>Your key stays in this browser profile.</p>
+          <button type="button" onClick={openSettings}>
             Open settings
           </button>
         </section>
@@ -599,17 +512,11 @@ export default function App() {
 
           {problem ? (
             <>
-              <p className="problem-meta">
-                {problem.source.site}
-                {codeforcesRating ? (
-                  <>
-                    {' · '}
-                    <CodeforcesRating rating={codeforcesRating} />
-                  </>
-                ) : null}
-                {' · '}
-                {Math.round(problem.confidence * 100)}% extraction confidence
-              </p>
+              {codeforcesRating ? (
+                <p className="problem-meta">
+                  <CodeforcesRating rating={codeforcesRating} />
+                </p>
+              ) : null}
               <p className="problem-preview">
                 <MathText
                   value={
@@ -682,28 +589,14 @@ export default function App() {
           <section className="session-heading">
             <div className="session-heading-surface">
               <div className="session-summary">
-                <div className="session-meta-row">
+                {sessionComplete || codeforcesRating ? (
                   <p className="eyebrow">
-                    {sessionComplete ? 'Solved' : `Hint stage: ${stage}`}
+                    {sessionComplete ? 'Solved · ' : null}
                     {codeforcesRating ? (
-                      <>
-                        {' · '}
-                        <CodeforcesRating rating={codeforcesRating} />
-                      </>
+                      <CodeforcesRating rating={codeforcesRating} />
                     ) : null}
                   </p>
-                  {usage.modelCalls ? (
-                    <p
-                      className="session-usage"
-                      title={sessionUsageDetail}
-                      aria-label={sessionUsageDetail}
-                    >
-                      {compactNumber.format(usage.inputTokens + usage.outputTokens)}{' '}
-                      tokens
-                      {' · '}≈{estimatedCost(usage.estimatedCostUsd)}
-                    </p>
-                  ) : null}
-                </div>
+                ) : null}
                 <h2>{problem?.title || 'Coaching session'}</h2>
               </div>
               <button
@@ -729,12 +622,6 @@ export default function App() {
                 ) : null}
               </article>
             ))}
-            {draft ? (
-              <article className="message message-assistant" aria-live="polite">
-                <p className="message-author">Coach</p>
-                <MessageContent content={draft} />
-              </article>
-            ) : null}
           </section>
 
           {sessionComplete ? (
@@ -747,7 +634,7 @@ export default function App() {
                 Choose another problem
               </button>
             </section>
-          ) : (
+          ) : status ? null : (
             <form
               className="composer"
               onSubmit={(event) => {
@@ -755,7 +642,7 @@ export default function App() {
                 submit();
               }}
             >
-              <label htmlFor="coach-message">What are you thinking?</label>
+              <label htmlFor="coach-message">What would you like to work on?</label>
               <textarea
                 id="coach-message"
                 value={composer}
@@ -767,12 +654,11 @@ export default function App() {
                   }
                 }}
                 rows={6}
-                placeholder="Explain your model, paste code, or describe where it breaks…"
-                disabled={Boolean(status)}
+                placeholder="Tell me your goal, share your thinking, paste code, or describe where it breaks…"
               />
               <div className="composer-actions">
                 <span className="quiet">⌘/Ctrl + Enter</span>
-                <button type="submit" disabled={!composer.trim() || Boolean(status)}>
+                <button type="submit" disabled={!composer.trim()}>
                   Ask the coach
                 </button>
               </div>
@@ -797,16 +683,7 @@ export default function App() {
                 </button>
               </span>
               <span className="status-progress">
-                {statusProgressMessage(status, statusClock)}
-              </span>
-              <span className="status-detail" aria-hidden="true">
-                {status.kind === 'saving-profile'
-                  ? 'Local only'
-                  : `OpenAI · ${COACH_PROCESSING_LABEL} · ${
-                      settings?.reasoningEffort ?? 'high'
-                    } reasoning`}
-                {' · '}
-                {elapsedTime(status.startedAt, statusClock)} elapsed
+                {statusProgressMessage(status, clock)}
               </span>
             </span>
           </p>
@@ -817,13 +694,6 @@ export default function App() {
           {error}
         </p>
       ) : null}
-
-      <footer>
-        <p>
-          The coach protects productive struggle. It will not write the solution for
-          you.
-        </p>
-      </footer>
     </main>
   );
 }

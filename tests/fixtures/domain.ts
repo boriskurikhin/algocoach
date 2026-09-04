@@ -3,7 +3,6 @@ import type {
   CoachingSession,
   ProblemAnalysis,
 } from '../../src/agent/schemas';
-import type { SessionUsage } from '../../src/agent/usage';
 import type { ProblemContext } from '../../src/extraction/schema';
 import type { LearnerSnapshot } from '../../src/learner/schema';
 import type { RestorableSession } from '../../src/messaging/schema';
@@ -19,8 +18,8 @@ export const problemFixture: ProblemContext = {
   },
   title: 'Batch Sums',
   statement:
-    'Given enough items and fixed-size batches, determine the total resource needed. ' +
-    'The input describes each conversion and the output asks for one total. '.repeat(8),
+    'Given enough items and fixed-size batches, determine the total resource needed.' +
+    ' The input describes each conversion and the output asks for one total.'.repeat(8),
   input: 'The first line contains N.',
   output: 'Print the required total.',
   constraints: ['1 <= N <= 100'],
@@ -44,31 +43,25 @@ export const learnerSnapshotFixture: LearnerSnapshot = {
 
 export const coachingMapFixture: CoachingMap = {
   problemSummary: 'Track fixed-size production while preserving excess output.',
-  solutionFamilies: [
-    {
-      name: 'demand expansion',
-      coreIdea: 'Expand unmet demand and retain surplus.',
-      invariant: 'Demand plus retained surplus conserves produced material.',
-      complexity: 'Linear in the number of conversions.',
-    },
-  ],
-  canonicalFamily: 'demand expansion',
+  solution: {
+    name: 'demand expansion',
+    coreIdea: 'Expand unmet demand and retain surplus.',
+    invariant: 'Demand plus retained surplus conserves produced material.',
+    complexity: 'Linear in the number of conversions.',
+  },
   edgeCases: ['Demand is already covered by surplus.'],
   likelyMisconceptions: ['Discarding production surplus.'],
   relevantConcepts: ['resource accounting'],
   hintLadder: [
     {
-      stage: 'listen',
       diagnosticQuestion: 'What does each quantity represent?',
       safeNudge: 'Separate needed material from material already owned.',
     },
     {
-      stage: 'clarify',
       diagnosticQuestion: 'What does one batch produce?',
       safeNudge: 'Trace a demand that is not divisible by batch size.',
     },
     {
-      stage: 'concretize',
       diagnosticQuestion: 'Where does excess output go?',
       safeNudge: 'Account for every produced unit.',
     },
@@ -81,18 +74,8 @@ export const problemAnalysisFixture: ProblemAnalysis = {
   estimatedCodeforcesRating: 1_300,
 };
 
-export const sessionUsageFixture: SessionUsage = {
-  modelCalls: 1,
-  inputTokens: 1_000,
-  cachedInputTokens: 200,
-  cacheWriteTokens: 100,
-  outputTokens: 500,
-  reasoningTokens: 350,
-  estimatedCostUsd: 0.01338,
-};
-
 export const sessionFixture: CoachingSession = {
-  version: 1,
+  version: 2,
   id: 'session-1',
   problemKey: problemFixture.source.url,
   problem: {
@@ -103,7 +86,7 @@ export const sessionFixture: CoachingSession = {
     },
   },
   coachingMap: coachingMapFixture,
-  stage: 'listen',
+  completed: false,
   messages: [
     {
       id: 'message-1',
@@ -118,7 +101,6 @@ export const sessionFixture: CoachingSession = {
       createdAt: 2,
     },
   ],
-  usage: sessionUsageFixture,
   createdAt: 1,
   updatedAt: 2,
 };
@@ -126,9 +108,8 @@ export const sessionFixture: CoachingSession = {
 export const restorableSessionFixture: RestorableSession = {
   sessionId: sessionFixture.id,
   problem: sessionFixture.problem,
-  stage: sessionFixture.stage,
+  completed: sessionFixture.completed,
   messages: sessionFixture.messages,
-  usage: sessionFixture.usage,
 };
 
 export const sessionReadyFixture = {

@@ -7,6 +7,7 @@ interface WhiteboardProps {
 }
 
 const GUTTER = 70;
+const LAYER_LABEL_HEIGHT = 28;
 
 type Emphasis = 'normal' | 'active' | 'secondary';
 
@@ -35,7 +36,12 @@ function Layer({
           {label}
         </text>
       ) : null}
-      {children}
+      <g
+        className="visual-layer-content"
+        transform={`translate(0 ${label ? LAYER_LABEL_HEIGHT : 0})`}
+      >
+        {children}
+      </g>
     </g>
   );
 }
@@ -277,15 +283,22 @@ function Primitive({
 }
 
 function primitiveHeight(primitive: VisualPrimitive): number {
+  const labelHeight =
+    primitive.type !== 'text' && primitive.label ? LAYER_LABEL_HEIGHT : 0;
   if (primitive.type === 'array') {
     return (
-      126 + (primitive.ranges?.length ?? 0) * 18 + (primitive.pointers.length ? 42 : 0)
+      labelHeight +
+      126 +
+      (primitive.ranges?.length ?? 0) * 18 +
+      (primitive.pointers.length ? 42 : 0)
     );
   }
   if (primitive.type === 'matrix') {
-    return 56 + primitive.values.length * matrixCellSize(primitive);
+    return labelHeight + 56 + primitive.values.length * matrixCellSize(primitive);
   }
-  if (primitive.type === 'graph' || primitive.type === 'tree') return 190;
+  if (primitive.type === 'graph' || primitive.type === 'tree') {
+    return labelHeight + 190;
+  }
   return 70;
 }
 

@@ -16,11 +16,12 @@ interface MessageContentProps {
   content: string;
 }
 
-type MessagePart =
-  { type: 'text'; value: string } | { type: 'code'; value: string; language: string };
+type TextPart = { type: 'text'; value: string };
+type CodePart = { type: 'code'; value: string; language: string };
+type InlineCodePart = { type: 'inline-code'; value: string };
 
-type InlinePart =
-  { type: 'text'; value: string } | { type: 'inline-code'; value: string };
+type MessagePart = TextPart | CodePart;
+type InlinePart = TextPart | InlineCodePart;
 
 const aliases: Record<string, string> = {
   'c++': 'cpp',
@@ -35,24 +36,20 @@ const aliases: Record<string, string> = {
   plaintext: 'text',
 };
 
-function parseMessage(content: string): MessagePart[] {
-  const parts: MessagePart[] = [];
-  const fences = /```([a-zA-Z0-9_+#-]*)[ \t]*\n([\s\S]*?)```/g;
+function splitDelimited<Part>(
+  content: string,
+  pattern: RegExp,
+  toPart: (match: RegExpMatchArray) => Part,
+): Array<TextPart | Part> {
+  const parts: Array<TextPart | Part> = [];
   let cursor = 0;
 
-  for (const match of content.matchAll(fences)) {
+  for (const match of content.matchAll(pattern)) {
     const index = match.index;
     if (index > cursor) {
       parts.push({ type: 'text', value: content.slice(cursor, index) });
     }
-    const rawLanguage = (match[1] || 'text').toLowerCase();
-    parts.push({
-      type: 'code',
-      language: Object.hasOwn(aliases, rawLanguage)
-        ? aliases[rawLanguage]!
-        : rawLanguage,
-      value: (match[2] ?? '').replace(/\n$/, ''),
-    });
+    parts.push(toPart(match));
     cursor = index + match[0].length;
   }
 
@@ -62,24 +59,29 @@ function parseMessage(content: string): MessagePart[] {
   return parts.length ? parts : [{ type: 'text', value: content }];
 }
 
+function parseMessage(content: string): MessagePart[] {
+  return splitDelimited<CodePart>(
+    content,
+    /```([a-zA-Z0-9_+#-]*)[ \t]*\n([\s\S]*?)```/g,
+    (match) => {
+      const rawLanguage = (match[1] || 'text').toLowerCase();
+      return {
+        type: 'code',
+        language: Object.hasOwn(aliases, rawLanguage)
+          ? aliases[rawLanguage]!
+          : rawLanguage,
+        value: (match[2] ?? '').replace(/\n$/, ''),
+      };
+    },
+  );
+}
+
 function parseInlineCode(content: string): InlinePart[] {
-  const parts: InlinePart[] = [];
-  const spans = /(?<![\\`])`([^`\n]+)`(?!`)/g;
-  let cursor = 0;
-
-  for (const match of content.matchAll(spans)) {
-    const index = match.index;
-    if (index > cursor) {
-      parts.push({ type: 'text', value: content.slice(cursor, index) });
-    }
-    parts.push({ type: 'inline-code', value: match[1] ?? '' });
-    cursor = index + match[0].length;
-  }
-
-  if (cursor < content.length) {
-    parts.push({ type: 'text', value: content.slice(cursor) });
-  }
-  return parts.length ? parts : [{ type: 'text', value: content }];
+  return splitDelimited<InlineCodePart>(
+    content,
+    /(?<![\\`])`([^`\n]+)`(?!`)/g,
+    (match) => ({ type: 'inline-code', value: match[1] ?? '' }),
+  );
 }
 
 function renderTokens(stream: Prism.TokenStream, key: string): ReactNode {

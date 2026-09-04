@@ -5,22 +5,23 @@ import {
 } from 'openai/core/error';
 import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
+import { PAGE_ACCESS_DENIED_MESSAGE } from '../extraction/schema';
 import type { ExtensionSettings } from '../storage/local';
+import type { CoachModel, ModelReasoningEffort } from './models';
 import { COACH_PROCESSING_TIER, OPENAI_CONNECTION_TIMEOUT_MS } from './schemas';
-import { summarizeResponseUsage, type SessionUsage } from './usage';
 
 type ResponseBody = Parameters<OpenAI['responses']['stream']>[0];
 
 class CoachRequestError extends Error {}
 
 const OUTPUT_BUDGET_ERROR =
-  'OpenAI reached this step’s reasoning/output budget before finishing. Try again; hard problems can vary between runs.';
+  'The coach could not finish this step. Try again; hard problems can vary between runs.';
 const CONTENT_FILTER_ERROR =
-  'OpenAI’s safety filter stopped this request. Try a shorter problem statement.';
+  'A safety filter stopped this request. Try a shorter problem statement.';
 
 export function createOpenAIClient(settings: ExtensionSettings): OpenAI {
   if (!settings.apiKey) {
-    throw new Error('Add an OpenAI API key in Settings before starting.');
+    throw new Error('Add an API key in Settings before starting.');
   }
 
   return new OpenAI({
@@ -32,29 +33,27 @@ export function createOpenAIClient(settings: ExtensionSettings): OpenAI {
 }
 
 /**
- * Every coaching call shares one model, the learner's reasoning settings,
- * standard processing, and no response storage. Those are applied last so a
- * caller cannot opt out.
+ * Apply the routed model and effort, standard processing, and no response
+ * storage after the task body so it cannot override those controls.
  */
 export async function requestModelResponse<Body extends ResponseBody>(
   settings: ExtensionSettings,
-  onActivity: (() => void) | undefined,
   body: Body,
   options: {
     signal?: AbortSignal | undefined;
-    reasoningMode?: ExtensionSettings['reasoningMode'] | undefined;
-    onUsage?: ((usage: SessionUsage) => void) | undefined;
+    model: CoachModel;
+    reasoningEffort: ModelReasoningEffort;
     promptCacheKey?: string | undefined;
-  } = {},
+  },
 ) {
-  onActivity?.();
+  const { model } = options;
   const stream = createOpenAIClient(settings).responses.stream(
     {
       ...body,
-      model: settings.model,
+      model,
       reasoning: {
-        effort: settings.reasoningEffort,
-        mode: options.reasoningMode ?? settings.reasoningMode,
+        effort: options.reasoningEffort,
+        mode: 'standard',
       },
       service_tier: COACH_PROCESSING_TIER,
       ...(options.promptCacheKey
@@ -67,18 +66,13 @@ export async function requestModelResponse<Body extends ResponseBody>(
     },
     { signal: options.signal },
   );
-  stream.on('event', () => onActivity?.());
   // The SDK timeout covers opening the streaming response. Once OpenAI has
   // accepted the request, let hard reasoning finish; the caller's signal is
   // the explicit cancellation path.
   const response = await stream.finalResponse();
-  onActivity?.();
-  if (response.usage) options.onUsage?.(summarizeResponseUsage(response.usage));
 
   if (response.status === 'failed') {
-    throw new CoachRequestError(
-      'OpenAI could not complete this step. Try the request again.',
-    );
+    throw new CoachRequestError('The coach could not complete this step. Try again.');
   }
   if (response.status === 'incomplete') {
     const message =
@@ -92,7 +86,6 @@ export async function requestModelResponse<Body extends ResponseBody>(
 
 export async function requestStructuredResponse<Schema extends z.ZodType>(input: {
   settings: ExtensionSettings;
-  onActivity?: (() => void) | undefined;
   instructions: string;
   prompt: string;
   schema: Schema;
@@ -100,13 +93,12 @@ export async function requestStructuredResponse<Schema extends z.ZodType>(input:
   maxOutputTokens: number;
   invalidResultMessage: string;
   signal?: AbortSignal | undefined;
-  reasoningMode?: ExtensionSettings['reasoningMode'] | undefined;
-  onUsage?: ((usage: SessionUsage) => void) | undefined;
+  model: CoachModel;
+  reasoningEffort: ModelReasoningEffort;
   promptCacheKey?: string | undefined;
 }): Promise<z.infer<Schema>> {
   const response = await requestModelResponse(
     input.settings,
-    input.onActivity,
     {
       instructions: input.instructions,
       input: input.prompt,
@@ -118,8 +110,8 @@ export async function requestStructuredResponse<Schema extends z.ZodType>(input:
     },
     {
       signal: input.signal,
-      reasoningMode: input.reasoningMode,
-      onUsage: input.onUsage,
+      model: input.model,
+      reasoningEffort: input.reasoningEffort,
       promptCacheKey: input.promptCacheKey,
     },
   );
@@ -131,28 +123,28 @@ export async function requestStructuredResponse<Schema extends z.ZodType>(input:
 export function safeOpenAIError(error: unknown): string {
   if (error instanceof CoachRequestError) return error.message;
   if (error instanceof OpenAI.AuthenticationError) {
-    return 'OpenAI rejected this API key. Check it in Settings.';
+    return 'The API key was rejected. Check it in Settings.';
   }
   if (error instanceof OpenAI.APIConnectionTimeoutError) {
-    return 'The connection to OpenAI closed before the response finished. Try again.';
+    return 'The connection closed before the response finished. Try again.';
   }
   if (error instanceof OpenAI.RateLimitError) {
-    return 'OpenAI rate-limited the request. Wait briefly and try again.';
+    return 'The coaching service is busy. Wait briefly and try again.';
   }
   if (error instanceof OpenAI.PermissionDeniedError) {
-    return 'This API key cannot use the configured model. Check its model access.';
+    return 'This API key lacks the required access.';
   }
   if (error instanceof OpenAI.NotFoundError) {
-    return 'The configured OpenAI model is not available to this API key.';
+    return 'The coaching service is not available to this API key.';
   }
   if (
     error instanceof OpenAI.BadRequestError ||
     error instanceof OpenAI.UnprocessableEntityError
   ) {
-    return 'OpenAI rejected the request. Check the model and reasoning settings.';
+    return 'The coaching service rejected this request. Try again.';
   }
   if (error instanceof OpenAI.APIConnectionError) {
-    return 'The extension could not reach OpenAI.';
+    return 'The extension could not reach the coaching service.';
   }
   if (error instanceof LengthFinishReasonError) {
     return OUTPUT_BUDGET_ERROR;
@@ -162,21 +154,21 @@ export function safeOpenAIError(error: unknown): string {
   }
   if (error instanceof OpenAI.APIError) {
     return error.status && error.status >= 500
-      ? 'OpenAI had a temporary server error. Try the request again.'
-      : `OpenAI rejected the request (${error.status ?? 'no status'}).`;
+      ? 'The coaching service had a temporary error. Try again.'
+      : `The coaching service rejected the request (${error.status ?? 'no status'}).`;
   }
   if (error instanceof z.ZodError) {
-    return 'OpenAI returned a response the coach could not read. Try the request again.';
+    return 'The coach received an unreadable response. Try again.';
   }
   if (error instanceof OpenAI.OpenAIError) {
-    return 'OpenAI ended the response before the coach could read it. Try the request again.';
+    return 'The response ended before the coach could read it. Try again.';
   }
   if (error instanceof Error) {
     const safeMessages = [
-      'Add an OpenAI API key',
+      'Add an API key',
       'No active webpage',
       'Chrome does not allow',
-      'Page access was not granted',
+      PAGE_ACCESS_DENIED_MESSAGE,
       'The page did not yield',
       'This coaching session expired',
     ];

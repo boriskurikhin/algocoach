@@ -27,20 +27,21 @@ describe('private problem analysis', () => {
 
   it('uses structured, non-stored analysis with explicit trust boundaries', async () => {
     await expect(
-      analyzeProblem(problemFixture, learnerSnapshotFixture, {
-        ...settings,
-        reasoningMode: 'pro',
+      analyzeProblem({
+        problem: problemFixture,
+        learner: learnerSnapshotFixture,
+        settings,
       }),
     ).resolves.toEqual(problemAnalysisFixture);
 
     const request = mocks.parse.mock.calls[0]?.[0];
-    expect(request.model).toBe('gpt-5.6-sol');
+    expect(request.model).toBe('gpt-5.6-terra');
     expect(request.store).toBe(false);
     expect(request.service_tier).toBe('default');
-    expect(request).not.toHaveProperty('prompt_cache_key');
-    expect(request.reasoning).toEqual({ effort: 'high', mode: 'pro' });
+    expect(request.prompt_cache_key).toBe('socratic-coach:analysis');
+    expect(request.reasoning).toEqual({ effort: 'medium', mode: 'standard' });
     expect(request.text.verbosity).toBe('low');
-    expect(request.max_output_tokens).toBe(64_000);
+    expect(request.max_output_tokens).toBe(16_000);
     expect(request.input).toContain('UNTRUSTED_PROBLEM_DATA_START');
     expect(request.input).toContain('UNCERTAIN_LEARNER_SNAPSHOT_START');
     expect(request.instructions).toContain('private');
@@ -51,54 +52,24 @@ describe('private problem analysis', () => {
   it('fails closed when structured analysis is absent', async () => {
     mocks.parse.mockResolvedValueOnce({ output_parsed: null });
     await expect(
-      analyzeProblem(problemFixture, learnerSnapshotFixture, settings),
+      analyzeProblem({
+        problem: problemFixture,
+        learner: learnerSnapshotFixture,
+        settings,
+      }),
     ).rejects.toThrow('incomplete problem analysis');
   });
 
   it('binds the model request to its extension session', async () => {
     const controller = new AbortController();
-    await analyzeProblem(
-      problemFixture,
-      learnerSnapshotFixture,
+    await analyzeProblem({
+      problem: problemFixture,
+      learner: learnerSnapshotFixture,
       settings,
-      undefined,
-      controller.signal,
-    );
-
-    expect(mocks.parse.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
-  });
-
-  it('reports final token usage to the session accumulator', async () => {
-    const onUsage = vi.fn();
-    mocks.parse.mockResolvedValueOnce({
-      output_parsed: problemAnalysisFixture,
-      usage: {
-        input_tokens: 100,
-        input_tokens_details: { cached_tokens: 20, cache_write_tokens: 0 },
-        output_tokens: 50,
-        output_tokens_details: { reasoning_tokens: 30 },
-        total_tokens: 150,
-      },
+      signal: controller.signal,
     });
 
-    await analyzeProblem(
-      problemFixture,
-      learnerSnapshotFixture,
-      settings,
-      undefined,
-      undefined,
-      onUsage,
-    );
-
-    expect(onUsage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        modelCalls: 1,
-        inputTokens: 100,
-        cachedInputTokens: 20,
-        outputTokens: 50,
-        reasoningTokens: 30,
-      }),
-    );
+    expect(mocks.parse.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
   });
 
   it('explains when reasoning consumes the output budget', async () => {
@@ -108,8 +79,12 @@ describe('private problem analysis', () => {
       output_parsed: null,
     });
     await expect(
-      analyzeProblem(problemFixture, learnerSnapshotFixture, settings),
-    ).rejects.toThrow('reasoning/output budget');
+      analyzeProblem({
+        problem: problemFixture,
+        learner: learnerSnapshotFixture,
+        settings,
+      }),
+    ).rejects.toThrow('could not finish this step');
   });
 
   it('lets an accepted model stream run past the former wall-clock cutoff', async () => {
@@ -124,7 +99,11 @@ describe('private problem analysis', () => {
             finishResponse = resolve;
           }),
       );
-      const result = analyzeProblem(problemFixture, learnerSnapshotFixture, settings);
+      const result = analyzeProblem({
+        problem: problemFixture,
+        learner: learnerSnapshotFixture,
+        settings,
+      });
 
       await vi.advanceTimersByTimeAsync(OPENAI_CONNECTION_TIMEOUT_MS);
       finishResponse({ output_parsed: problemAnalysisFixture });

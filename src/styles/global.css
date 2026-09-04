@@ -8,7 +8,6 @@
   --accent: #0645ad;
   --danger: #9c1c1c;
   --accent-hover: color-mix(in srgb, var(--accent) 82%, var(--ink));
-  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--paper));
   --danger-soft: color-mix(in srgb, var(--danger) 10%, var(--paper));
   --warning-soft: color-mix(in srgb, var(--danger) 12%, var(--paper));
   --font-sans:
@@ -105,11 +104,11 @@ h1,
 h2,
 h3 {
   margin: 0 0 var(--space-2);
+  font-family: var(--font-serif);
   line-height: 1.2;
 }
 
 h1 {
-  font-family: var(--font-serif);
   font-size: var(--text-xl);
 }
 

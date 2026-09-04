@@ -51,7 +51,6 @@ describe('local credential and profile storage', () => {
   it('keeps the API key available internally but excludes it from exports', async () => {
     await saveSettings({
       apiKey: 'sk-secret-test-value',
-      model: 'gpt-5.6-sol',
     });
     expect((await getSettings()).apiKey).toBe('sk-secret-test-value');
 
@@ -60,21 +59,9 @@ describe('local credential and profile storage', () => {
     expect(JSON.parse(exported).settings.hasApiKey).toBe(true);
   });
 
-  it('upgrades old lower-effort settings without losing the API key', async () => {
-    mocks.values.set('socratic-coach:settings', {
-      ...settingsFixture,
-      reasoningEffort: 'low',
-    });
-
-    expect(await getSettings()).toMatchObject({
-      apiKey: settingsFixture.apiKey,
-      reasoningEffort: 'high',
-    });
-  });
-
   it('fails closed without a key and never exposes arbitrary error text', () => {
     expect(() => createOpenAIClient({ ...settingsFixture, apiKey: '' })).toThrow(
-      /Add an OpenAI API key/,
+      /Add an API key/,
     );
     expect(safeOpenAIError(new Error('secret internal detail'))).toBe(
       'The coach hit an internal error. Reload the extension and try again.',

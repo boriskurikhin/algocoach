@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PAGE_ACCESS_DENIED_MESSAGE } from '../../src/extraction/schema';
 import {
   problemFixture,
   restorableSessionFixture,
@@ -78,7 +79,7 @@ async function runtimeResponse(request: { type: string }) {
     return { ok: true, data: { session: null } };
   }
   if (request.type === 'session:clear-active') {
-    return { ok: true, data: {} };
+    return { ok: true, data: null };
   }
   return { ok: false, error: 'Unexpected request.' };
 }
@@ -96,7 +97,10 @@ describe('side panel coaching flow', () => {
     mocks.sendMessage.mockReset();
     mocks.postMessage.mockClear();
     mocks.connect.mockClear();
-    mocks.openOptionsPage.mockClear();
+    mocks.openOptionsPage.mockReset();
+    mocks.openOptionsPage.mockResolvedValue(undefined);
+    mocks.createTab.mockReset();
+    mocks.createTab.mockResolvedValue(undefined);
     mocks.messageListeners.clear();
     mocks.disconnectListeners.clear();
     mocks.contains.mockResolvedValue(true);
@@ -135,7 +139,6 @@ describe('side panel coaching flow', () => {
       });
     });
     expect(screen.getByText('What are you thinking so far?')).toBeInTheDocument();
-    expect(screen.getByText(/Hint stage: listen/)).toBeInTheDocument();
     expect(screen.getByText('CF ≈1300')).toHaveClass('cf-rating-pupil');
     expect(screen.getByText('CF ≈1300')).toHaveAttribute(
       'title',
@@ -145,9 +148,8 @@ describe('side panel coaching flow', () => {
       'data-mascot-state',
       'greeting',
     );
-    expect(screen.getByText(/1\.5K tokens · ≈\$0\.013/)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('What are you thinking?'), {
+    fireEvent.change(screen.getByLabelText('What would you like to work on?'), {
       target: { value: 'I think rounding is involved, but I lose extra units.' },
     });
     expect(
@@ -158,6 +160,15 @@ describe('side panel coaching flow', () => {
       screen.getByRole('img', { name: 'Coach is reading your reasoning' }),
     ).toHaveAttribute('data-mascot-state', 'reading');
     expect(screen.getByText(/I think rounding is involved/)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('What would you like to work on?'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Thinking through what would help next…'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|tokens)\b/i),
+    ).not.toBeInTheDocument();
     expect(mocks.postMessage).toHaveBeenLastCalledWith({
       type: 'session:user-message',
       sessionId: 'session-1',
@@ -166,22 +177,9 @@ describe('side panel coaching flow', () => {
 
     act(() => {
       emit({
-        type: 'coach:chunk',
-        sessionId: 'session-1',
-        chunk: 'Where does the sixth unit go?',
-      });
-    });
-    expect(screen.getByText('Where does the sixth unit go?')).toBeInTheDocument();
-    expect(
-      screen.getByRole('img', { name: 'Coach is asking a guiding question' }),
-    ).toHaveAttribute('data-mascot-state', 'coaching');
-
-    act(() => {
-      emit({
         type: 'coach:reply',
         sessionId: 'session-1',
-        stage: 'clarify',
-        usage: sessionFixture.usage,
+        completed: false,
         message: {
           id: 'reply',
           role: 'assistant',
@@ -194,15 +192,18 @@ describe('side panel coaching flow', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Hint stage: clarify/)).toBeInTheDocument();
+      expect(screen.getByText('Where does the sixth unit go?')).toBeInTheDocument();
     });
     expect(
-      screen.getByRole('img', { name: 'Coach noticed a useful insight' }),
-    ).toHaveAttribute('data-mascot-state', 'aha');
+      screen.getByRole('img', { name: 'Coach is ready for your next thought' }),
+    ).toHaveAttribute('data-mascot-state', 'idle');
     expect(screen.getByText('python')).toBeInTheDocument();
     expect(document.querySelector('.token.builtin')).toHaveTextContent('min');
     expect(screen.getByText('One batch')).toBeInTheDocument();
     expect(screen.getByText(sceneFixture.question)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('What would you like to work on?'),
+    ).toBeInTheDocument();
   });
 
   it('closes the composer after the learner reaches an optimal solution', async () => {
@@ -212,7 +213,7 @@ describe('side panel coaching flow', () => {
     expect(
       await screen.findByText('I think I need to round up each batch.'),
     ).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('What are you thinking?'), {
+    fireEvent.change(screen.getByLabelText('What would you like to work on?'), {
       target: {
         value:
           'I preserve every surplus unit and process each conversion once, so it is linear.',
@@ -224,8 +225,7 @@ describe('side panel coaching flow', () => {
       emit({
         type: 'coach:reply',
         sessionId: sessionFixture.id,
-        stage: 'complete',
-        usage: sessionFixture.usage,
+        completed: true,
         message: {
           id: 'completed',
           role: 'assistant',
@@ -240,9 +240,11 @@ describe('side panel coaching flow', () => {
     expect(screen.getByText(/arrived at an optimal solution/i)).toBeInTheDocument();
     expect(screen.getByText('Optimal solution reached.')).toBeInTheDocument();
     expect(
-      screen.getByRole('img', { name: 'Coach is proud of your completed lesson' }),
+      screen.getByRole('img', { name: 'Coaching session is complete' }),
     ).toHaveAttribute('data-mascot-state', 'complete');
-    expect(screen.queryByLabelText('What are you thinking?')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('What would you like to work on?'),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Ask the coach' }),
     ).not.toBeInTheDocument();
@@ -292,7 +294,7 @@ describe('side panel coaching flow', () => {
     expect(
       screen.getByText('I think I need to round up each batch.'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Hint stage: listen/)).toBeInTheDocument();
+    expect(screen.getByText('CF ≈1300')).toBeInTheDocument();
     expect(mocks.sendMessage).not.toHaveBeenCalledWith({ type: 'problem:extract' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Change problem' }));
@@ -303,6 +305,22 @@ describe('side panel coaching flow', () => {
       });
     });
     expect(screen.getByRole('button', { name: 'Start coaching' })).toBeInTheDocument();
+  });
+
+  it('surfaces an active-session restoration failure without re-extracting', async () => {
+    mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
+      if (request.type === 'session:get-active') {
+        return { ok: false, error: 'Session storage is unavailable.' };
+      }
+      return runtimeResponse(request);
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Session storage is unavailable.',
+    );
+    expect(mocks.sendMessage).not.toHaveBeenCalledWith({ type: 'problem:extract' });
   });
 
   it('keeps the conversation open when changing problems cannot be saved', async () => {
@@ -322,7 +340,9 @@ describe('side panel coaching flow', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Session storage is unavailable.',
     );
-    expect(screen.getByText(/Hint stage: listen/)).toBeInTheDocument();
+    expect(
+      screen.getByText('I think I need to round up each batch.'),
+    ).toBeInTheDocument();
   });
 
   it('reconnects before the next coaching message after an idle disconnect', async () => {
@@ -334,7 +354,7 @@ describe('side panel coaching flow', () => {
     });
 
     act(disconnectPort);
-    fireEvent.change(screen.getByLabelText('What are you thinking?'), {
+    fireEvent.change(screen.getByLabelText('What would you like to work on?'), {
       target: { value: 'I traced one more batch.' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Ask the coach' }));
@@ -348,35 +368,32 @@ describe('side panel coaching flow', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows timed model progress and the reason a request stopped', async () => {
+  it('shows coaching progress and the reason a request stopped', async () => {
     const view = render(<App />);
 
     expect(await screen.findByText('Batch Sums')).toBeInTheDocument();
     vi.useFakeTimers();
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Start coaching' }));
-      expect(
-        screen.getByText('Reading the statement and constraints…'),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/OpenAI.*Standard.*high reasoning.*0s elapsed/),
-      ).toBeInTheDocument();
+      expect(screen.getByText('Reading the statement…')).toBeInTheDocument();
+      expect(screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol)\b/i)).toBeNull();
       expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
 
       act(() => vi.advanceTimersByTime(4_000));
       expect(
-        screen.getByText('Separating the core model from edge cases…'),
+        screen.getByText('Checking constraints and edge cases…'),
       ).toBeInTheDocument();
 
       act(() => {
         emit({
           type: 'coach:error',
-          message:
-            'OpenAI reached this step’s reasoning/output budget before finishing. Try again.',
+          message: 'The coach could not finish this step. Try again.',
         });
       });
 
-      expect(screen.getByRole('alert')).toHaveTextContent('reasoning/output budget');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'The coach could not finish this step.',
+      );
       expect(
         screen.getByRole('img', {
           name: 'Coach is here to help you get unstuck',
@@ -436,6 +453,22 @@ describe('side panel coaching flow', () => {
     });
   });
 
+  it('reports a failed lasting-access request', async () => {
+    mocks.contains.mockResolvedValue(false);
+    mocks.request.mockRejectedValueOnce(new Error('Permission request failed.'));
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: /read judge\.example without the icon/i,
+      }),
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Permission request failed.',
+    );
+  });
+
   it('does not ask again once the site is permanently allowed', async () => {
     render(<App />);
 
@@ -446,7 +479,7 @@ describe('side panel coaching flow', () => {
   it('routes a denied page to Chrome’s own site-access control', async () => {
     mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
       if (request.type === 'problem:extract') {
-        return { ok: false, error: 'Page access was not granted. Click the icon.' };
+        return { ok: false, error: PAGE_ACCESS_DENIED_MESSAGE };
       }
       return runtimeResponse(request);
     });

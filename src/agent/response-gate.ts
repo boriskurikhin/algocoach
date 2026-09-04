@@ -4,42 +4,19 @@ import { MAX_TEACHING_SNIPPET_LINES } from '../prompts/policy';
 import type { ExtensionSettings } from '../storage/local';
 import { isFocusedVisualization, type DrawConcept } from '../visualization/schema';
 import { requestStructuredResponse } from './openai-client';
+import { reasoningPlanForRating } from './reasoning';
 import {
   GuardResultSchema,
-  RESPONSE_GUARD_MAX_OUTPUT_TOKENS,
   type ChatMessage,
-  type CoachStage,
   type CoachingMap,
   type GuardResult,
-  type HintStage,
 } from './schemas';
-import type { SessionUsage } from './usage';
-
-const stageOrder: HintStage[] = [
-  'listen',
-  'clarify',
-  'concretize',
-  'contradiction',
-  'boundary',
-  'connect',
-];
-
-function clampStage(current: CoachStage, requested: CoachStage): CoachStage {
-  if (current === 'complete') return 'complete';
-  if (requested === 'complete') return current;
-  const currentIndex = stageOrder.indexOf(current);
-  const requestedIndex = stageOrder.indexOf(requested);
-  return (
-    stageOrder[Math.max(currentIndex, Math.min(requestedIndex, currentIndex + 1))] ??
-    current
-  );
-}
 
 const OPTIMAL_SOLUTION_REPLY =
   'Yes — you’ve arrived at an optimal solution. Your core algorithm and target ' +
   'complexity match the intended approach. This coaching session is complete.';
 
-export function hasObviousSolutionLeak(value: string): boolean {
+function hasObviousSolutionLeak(value: string): boolean {
   const snippets = [...value.matchAll(/```[\w+#-]*\n?([\s\S]*?)```/g)].map(
     (match) => match[1] ?? '',
   );
@@ -67,31 +44,29 @@ export function hasObviousSolutionLeak(value: string): boolean {
 
 export async function guardCoachResponse(input: {
   sessionId: string;
-  stage: CoachStage;
   latestLearnerMessage: string;
   candidateReply: string;
   visualization?: DrawConcept;
   coachingMap: CoachingMap;
   learner: LearnerSnapshot;
   problemKey: string;
+  codeforcesRating?: number;
   conversation: ChatMessage[];
   settings: ExtensionSettings;
-  onActivity?: () => void;
   signal?: AbortSignal;
-  onUsage?: (usage: SessionUsage) => void;
 }): Promise<GuardResult> {
+  const reasoning = reasoningPlanForRating(input.codeforcesRating ?? null, 'guard');
   const guarded = await requestStructuredResponse({
     settings: input.settings,
-    onActivity: input.onActivity,
     instructions: RESPONSE_GUARD_SYSTEM_PROMPT,
     prompt: buildGuardInput(input),
     schema: GuardResultSchema,
     schemaName: 'guarded_coach_response',
-    maxOutputTokens: RESPONSE_GUARD_MAX_OUTPUT_TOKENS,
-    invalidResultMessage:
-      'OpenAI returned an incomplete hint-safety check. Try the request again.',
+    maxOutputTokens: reasoning.maxOutputTokens,
+    invalidResultMessage: 'The coach received an incomplete safety check. Try again.',
     signal: input.signal,
-    onUsage: input.onUsage,
+    model: reasoning.model,
+    reasoningEffort: reasoning.effort,
     promptCacheKey: `socratic-coach:guard:${input.sessionId}`,
   });
 
@@ -99,18 +74,16 @@ export async function guardCoachResponse(input: {
     return {
       ...guarded,
       safeReply: OPTIMAL_SOLUTION_REPLY,
-      nextStage: 'complete',
       allowVisualization: false,
     };
   }
 
   if (hasObviousSolutionLeak(guarded.safeReply)) {
     return {
-      allowed: false,
-      violations: ['overpowered-hint'],
       safeReply:
-        'Let’s slow this down to one check. What should the key quantity represent before and after one tiny example?',
-      nextStage: input.stage,
+        'Let’s stay with the part you’re working on rather than jump to a full ' +
+        'solution. Tell me the specific claim, step, or code behavior you want ' +
+        'to examine together.',
       solutionStatus: 'in-progress',
       allowVisualization: false,
       profileObservations: guarded.profileObservations,
@@ -119,9 +92,7 @@ export async function guardCoachResponse(input: {
 
   return {
     ...guarded,
-    nextStage: clampStage(input.stage, guarded.nextStage),
     allowVisualization:
-      guarded.allowed &&
       guarded.allowVisualization &&
       Boolean(input.visualization && isFocusedVisualization(input.visualization)),
   };

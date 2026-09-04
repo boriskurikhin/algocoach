@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PAGE_ACCESS_DENIED_MESSAGE } from '../../src/extraction/schema';
 import { problemFixture } from '../fixtures/domain';
 
 const mocks = vi.hoisted(() => ({
@@ -75,7 +76,7 @@ describe('active-tab extraction boundary', () => {
 
     // Chrome withholds the URL until the extension may read the tab.
     mocks.query.mockResolvedValueOnce([{ id: 1 }]);
-    await expect(extractActiveProblem()).rejects.toThrow(/access was not granted/);
+    await expect(extractActiveProblem()).rejects.toThrow(PAGE_ACCESS_DENIED_MESSAGE);
     expect(mocks.executeScript).not.toHaveBeenCalled();
 
     mocks.query.mockResolvedValueOnce([{ id: 1, url: 'chrome://extensions' }]);
@@ -83,7 +84,7 @@ describe('active-tab extraction boundary', () => {
 
     mocks.query.mockResolvedValueOnce([{ id: 1, url: 'https://example.com' }]);
     mocks.executeScript.mockRejectedValueOnce(new Error('raw browser error'));
-    await expect(extractActiveProblem()).rejects.toThrow(/access was not granted/);
+    await expect(extractActiveProblem()).rejects.toThrow(PAGE_ACCESS_DENIED_MESSAGE);
 
     mocks.query.mockResolvedValueOnce([{ id: 1, url: 'https://example.com' }]);
     mocks.executeScript.mockResolvedValueOnce([{ result: { bad: true } }]);

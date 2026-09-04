@@ -122,6 +122,12 @@
 }
 
 .session-heading {
+  --session-heading-background: linear-gradient(
+    to right,
+    transparent 0 var(--coach-mascot-lane),
+    var(--paper) var(--coach-mascot-lane)
+  );
+
   position: sticky;
   z-index: 6;
   top: 0;
@@ -132,11 +138,7 @@
   align-items: center;
   min-height: calc(var(--coach-mascot-size) + var(--space-3));
   padding: var(--space-2) 0 var(--space-2) var(--coach-mascot-lane);
-  background: linear-gradient(
-    to right,
-    transparent 0 var(--coach-mascot-lane),
-    var(--paper) var(--coach-mascot-lane)
-  );
+  background: var(--session-heading-background);
   border-bottom: 1px solid var(--border);
   box-shadow: inset 0 1px var(--border);
   transition: padding-left 140ms ease-out;
@@ -147,32 +149,12 @@
   min-width: 0;
 }
 
-.session-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 var(--space-3);
-  margin-bottom: var(--space-1);
-}
-
-.session-meta-row .eyebrow,
-.session-meta-row .session-usage {
-  margin: 0;
-}
-
 .session-heading h2 {
   overflow: hidden;
   margin: 0;
   font-size: var(--text-base);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.session-usage {
-  margin: 0;
-  color: var(--ink-muted);
-  font-size: var(--text-xs);
-  line-height: 1.5;
 }
 
 @supports (container-type: scroll-state) {
@@ -184,11 +166,7 @@
   @container scroll-state(stuck: top) {
     .session-heading-surface {
       padding-left: var(--coach-mascot-lane);
-      background: linear-gradient(
-        to right,
-        transparent 0 var(--coach-mascot-lane),
-        var(--paper) var(--coach-mascot-lane)
-      );
+      background: var(--session-heading-background);
       box-shadow: none;
     }
   }
@@ -214,8 +192,6 @@
 
 .coach-mascot[data-mascot-state='idle'] img,
 .coach-mascot[data-mascot-state='greeting'] img,
-.coach-mascot[data-mascot-state='clarify'] img,
-.coach-mascot[data-mascot-state='support'] img,
 .coach-mascot[data-mascot-state='complete'] img {
   animation: mascot-float 3s ease-in-out infinite;
 }
@@ -224,16 +200,6 @@
 .coach-mascot[data-mascot-state='reading'] img,
 .coach-mascot[data-mascot-state='thinking'] img {
   animation: mascot-breathe 1.7s ease-in-out infinite;
-}
-
-.coach-mascot[data-mascot-state='coaching'] img,
-.coach-mascot[data-mascot-state='nudge'] img {
-  animation: mascot-gesture 0.7s ease-out both;
-}
-
-.coach-mascot[data-mascot-state='aha'] img,
-.coach-mascot[data-mascot-state='celebrate'] img {
-  animation: mascot-pop 0.65s ease-out both;
 }
 
 .conversation {
@@ -246,7 +212,7 @@
 }
 
 .message-user {
-  margin-left: var(--space-4);
+  padding-left: var(--space-4);
 }
 
 .message-author {
@@ -262,11 +228,6 @@
   font-family: var(--font-serif);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.message-user .message-content {
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
 }
 
 .composer {
@@ -330,8 +291,7 @@
 }
 
 .status-copy,
-.status-progress,
-.status-detail {
+.status-progress {
   display: block;
 }
 
@@ -343,19 +303,6 @@
   margin-top: 0.125rem;
   color: var(--ink);
   font-size: var(--text-sm);
-}
-
-.status-detail {
-  margin-top: 0.125rem;
-  font-size: var(--text-xs);
-}
-
-footer {
-  margin-top: var(--space-6);
-  padding-top: var(--space-3);
-  color: var(--ink-muted);
-  font-size: var(--text-xs);
-  border-top: 1px solid var(--border);
 }
 
 @keyframes breathe {
@@ -374,23 +321,6 @@ footer {
 @keyframes mascot-breathe {
   50% {
     transform: translateY(-0.12rem) scale(1.015);
-  }
-}
-
-@keyframes mascot-gesture {
-  45% {
-    transform: rotate(-1.5deg) scale(1.035);
-  }
-}
-
-@keyframes mascot-pop {
-  0% {
-    opacity: 0;
-    transform: translateY(0.35rem) scale(0.88);
-  }
-
-  65% {
-    transform: translateY(-0.08rem) scale(1.04);
   }
 }
 

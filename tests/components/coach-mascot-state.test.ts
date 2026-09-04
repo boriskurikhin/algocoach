@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  coachMascotMomentForStageChange,
   deriveCoachMascotState,
   type CoachMascotContext,
 } from '../../src/components/coach-mascot-state';
@@ -9,12 +8,10 @@ const baseContext: CoachMascotContext = {
   sessionId: 'session-1',
   extracting: false,
   status: null,
-  draft: '',
   composer: '',
   error: '',
-  stage: 'listen',
+  completed: false,
   messageCount: 2,
-  moment: null,
 };
 
 describe('coach mascot state', () => {
@@ -34,46 +31,18 @@ describe('coach mascot state', () => {
     expect(deriveCoachMascotState({ ...baseContext, status: 'checking' })).toBe(
       'thinking',
     );
-    expect(
-      deriveCoachMascotState({
-        ...baseContext,
-        status: 'checking',
-        draft: 'What changes if…',
-      }),
-    ).toBe('coaching');
     expect(deriveCoachMascotState({ ...baseContext, error: 'Connection lost.' })).toBe(
       'support',
     );
   });
 
-  it('uses the hint stage for a quiet session', () => {
-    expect(deriveCoachMascotState({ ...baseContext, stage: 'clarify' })).toBe(
-      'clarify',
-    );
-    expect(deriveCoachMascotState({ ...baseContext, stage: 'concretize' })).toBe(
-      'coaching',
-    );
-    expect(deriveCoachMascotState({ ...baseContext, stage: 'contradiction' })).toBe(
-      'thinking',
-    );
-    expect(deriveCoachMascotState({ ...baseContext, stage: 'boundary' })).toBe(
-      'support',
-    );
-    expect(deriveCoachMascotState({ ...baseContext, stage: 'connect' })).toBe(
-      'celebrate',
-    );
-    expect(deriveCoachMascotState({ ...baseContext, stage: 'complete' })).toBe(
+  it('uses simple terminal and quiet-session states', () => {
+    expect(deriveCoachMascotState({ ...baseContext, completed: true })).toBe(
       'complete',
     );
-  });
-
-  it('turns stage changes into short progress reactions', () => {
-    expect(coachMascotMomentForStageChange('listen', 'clarify')).toBe('aha');
-    expect(coachMascotMomentForStageChange('contradiction', 'boundary')).toBe(
-      'celebrate',
+    expect(deriveCoachMascotState(baseContext)).toBe('idle');
+    expect(deriveCoachMascotState({ ...baseContext, messageCount: 1 })).toBe(
+      'greeting',
     );
-    expect(coachMascotMomentForStageChange('boundary', 'connect')).toBe('celebrate');
-    expect(coachMascotMomentForStageChange('connect', 'complete')).toBe('complete');
-    expect(coachMascotMomentForStageChange('clarify', 'clarify')).toBe('nudge');
   });
 });

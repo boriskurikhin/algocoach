@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ActiveSessionResultSchema,
   CoachServerEventSchema,
-  PublicSettingsSchema,
+  RuntimeResultSchemas,
 } from '../../src/messaging/schema';
 import {
   extensionHostPermissions,
@@ -35,7 +34,7 @@ describe('extension trust boundaries', () => {
   });
 
   it('strips API credentials from public settings', () => {
-    const publicValue = PublicSettingsSchema.parse({
+    const publicValue = RuntimeResultSchemas['settings:get'].parse({
       hasApiKey: true,
       apiKey: 'sk-must-not-cross-the-message-boundary',
       model: 'gpt-5.6-sol',
@@ -43,33 +42,27 @@ describe('extension trust boundaries', () => {
       reasoningMode: 'standard',
     });
     expect(publicValue).not.toHaveProperty('apiKey');
-    expect(
-      PublicSettingsSchema.safeParse({
-        ...publicValue,
-        model: 'gpt-5.6-terra',
-      }).success,
-    ).toBe(false);
+    expect(publicValue).not.toHaveProperty('model');
+    expect(publicValue).not.toHaveProperty('reasoningEffort');
+    expect(publicValue).not.toHaveProperty('reasoningMode');
   });
 
   it('strips the private coaching map from side-panel session events', () => {
     const event = CoachServerEventSchema.parse({
       ...sessionReadyFixture,
       messages: [],
-      coachingMap: { canonicalFamily: 'must remain private' },
+      coachingMap: { solution: 'must remain private' },
     });
     expect(event).not.toHaveProperty('coachingMap');
-    if (event.type !== 'session:ready') throw new Error('Expected session event.');
-    expect(event.usage).toEqual(sessionFixture.usage);
   });
 
   it('strips the private coaching map from restored conversations', () => {
-    const result = ActiveSessionResultSchema.parse({
+    const result = RuntimeResultSchemas['session:get-active'].parse({
       session: {
         ...restorableSessionFixture,
         coachingMap: sessionFixture.coachingMap,
       },
     });
     expect(result.session).not.toHaveProperty('coachingMap');
-    expect(result.session?.usage).toEqual(sessionFixture.usage);
   });
 });

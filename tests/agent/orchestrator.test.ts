@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { COACH_STATUS_LABELS } from '../../src/agent/schemas';
 import { createEmptyLearnerProfile } from '../../src/learner/update-profile';
 import {
   coachingMapFixture,
@@ -6,7 +7,6 @@ import {
   problemFixture,
   sceneFixture,
   sessionFixture,
-  sessionUsageFixture,
 } from '../fixtures/domain';
 
 const mocks = vi.hoisted(() => ({
@@ -39,12 +39,7 @@ vi.mock('../../src/storage/session', () => ({
 
 import { respondToLearner, startCoachingSession } from '../../src/agent/orchestrator';
 
-const settings = {
-  apiKey: 'test-key',
-  model: 'gpt-5.6-sol' as const,
-  reasoningEffort: 'high' as const,
-  reasoningMode: 'standard' as const,
-};
+const settings = { apiKey: 'test-key' };
 
 describe('coaching orchestration', () => {
   beforeEach(() => {
@@ -57,16 +52,12 @@ describe('coaching orchestration', () => {
 
   it('studies the problem before creating the learner-visible session', async () => {
     const onStatus = vi.fn();
-    mocks.analyze.mockImplementationOnce(async (...args: unknown[]) => {
-      const recordUsage = args[5] as (usage: typeof sessionUsageFixture) => void;
-      recordUsage(sessionUsageFixture);
-      return problemAnalysisFixture;
-    });
+    const now = vi.spyOn(Date, 'now').mockReturnValueOnce(100).mockReturnValue(500);
     const session = await startCoachingSession({
       problem: problemFixture,
       settings,
       onStatus,
-    });
+    }).finally(() => now.mockRestore());
 
     expect(mocks.analyze).toHaveBeenCalledOnce();
     expect(session.coachingMap).toEqual(coachingMapFixture);
@@ -74,18 +65,21 @@ describe('coaching orchestration', () => {
       value: 1_300,
       source: 'estimated',
     });
-    expect(session.messages[0]?.content).toMatch(/smallest example/i);
-    expect(mocks.analyze).toHaveBeenCalledWith(
-      problemFixture,
-      expect.objectContaining({ caveat: expect.stringMatching(/uncertain/i) }),
+    expect(session.messages[0]?.content).toContain(problemFixture.title);
+    expect(session.messages[0]?.content).toMatch(/what would you like to accomplish/i);
+    expect(session.messages[0]?.content).toMatch(/clarify|pressure-test|debug/i);
+    expect(session.messages[0]?.content).toMatch(/starting fresh/i);
+    expect(session.createdAt).toBe(100);
+    expect(session.messages[0]?.createdAt).toBe(500);
+    expect(session.updatedAt).toBe(500);
+    expect(mocks.analyze).toHaveBeenCalledWith({
+      problem: problemFixture,
+      learner: expect.objectContaining({ caveat: expect.stringMatching(/uncertain/i) }),
       settings,
-      undefined,
-      undefined,
-      expect.any(Function),
-    );
-    expect(session.usage).toEqual(sessionUsageFixture);
+      signal: undefined,
+    });
     expect(mocks.saveSession).toHaveBeenCalledWith(session);
-    expect(onStatus).toHaveBeenCalledWith('studying', expect.any(String));
+    expect(onStatus).toHaveBeenCalledWith('studying', COACH_STATUS_LABELS.studying);
   });
 
   it('keeps an official Codeforces rating instead of the model estimate', async () => {
@@ -119,36 +113,26 @@ describe('coaching orchestration', () => {
 
   it('persists only the guarded reply and guarded profile evidence', async () => {
     mocks.getSession.mockResolvedValue(sessionFixture);
-    mocks.draft.mockImplementation(async (...args: unknown[]) => {
-      const recordUsage = args[5] as (usage: typeof sessionUsageFixture) => void;
-      recordUsage(sessionUsageFixture);
-      return {
-        reply: 'Candidate text',
-        visualization: sceneFixture,
-      };
+    mocks.draft.mockResolvedValue({
+      reply: 'Candidate text',
+      visualization: sceneFixture,
     });
-    mocks.guard.mockImplementation(async (guardInput) => {
-      guardInput.onUsage(sessionUsageFixture);
-      return {
-        allowed: true,
-        violations: ['none'],
-        safeReply: 'What quantity should remain unchanged?',
-        nextStage: 'clarify',
-        solutionStatus: 'in-progress',
-        allowVisualization: true,
-        profileObservations: [
-          {
-            dimension: 'concept',
-            key: 'invariants',
-            evidenceType: 'demonstrated',
-            note: 'The learner stated a candidate invariant.',
-            supports: true,
-            confidence: 0.8,
-            knowledgeLevel: 'practicing',
-            problemKey: null,
-          },
-        ],
-      };
+    mocks.guard.mockResolvedValue({
+      safeReply: 'What quantity should remain unchanged?',
+      solutionStatus: 'in-progress',
+      allowVisualization: true,
+      profileObservations: [
+        {
+          dimension: 'concept',
+          key: 'invariants',
+          evidenceType: 'demonstrated',
+          note: 'The learner stated a candidate invariant.',
+          supports: true,
+          confidence: 0.8,
+          knowledgeLevel: 'practicing',
+          problemKey: null,
+        },
+      ],
     });
 
     const { session, message } = await respondToLearner({
@@ -162,6 +146,7 @@ describe('coaching orchestration', () => {
         sessionId: sessionFixture.id,
         candidateReply: 'Candidate text',
         latestLearnerMessage: 'I think the total should stay fixed.',
+        codeforcesRating: 1_300,
         conversation: expect.arrayContaining([
           expect.objectContaining({
             role: 'user',
@@ -175,12 +160,8 @@ describe('coaching orchestration', () => {
     );
     expect(message.content).toBe('What quantity should remain unchanged?');
     expect(message.visualization).toEqual(sceneFixture);
-    expect(session.stage).toBe('clarify');
+    expect(session.completed).toBe(false);
     expect(session.messages.at(-1)).toEqual(message);
-    expect(session.usage.modelCalls).toBe(3);
-    expect(session.usage.estimatedCostUsd).toBeCloseTo(
-      sessionUsageFixture.estimatedCostUsd * 3,
-    );
     expect(mocks.saveProfile).toHaveBeenCalledWith(
       expect.objectContaining({
         concepts: expect.objectContaining({ invariants: expect.any(Object) }),
@@ -196,11 +177,8 @@ describe('coaching orchestration', () => {
       visualization: sceneFixture,
     });
     mocks.guard.mockResolvedValue({
-      allowed: true,
-      violations: ['none'],
       safeReply:
         'Yes — you’ve arrived at an optimal solution. This coaching session is complete.',
-      nextStage: 'complete',
       solutionStatus: 'optimal',
       allowVisualization: false,
       profileObservations: [],
@@ -213,18 +191,18 @@ describe('coaching orchestration', () => {
       settings,
     });
 
-    expect(session.stage).toBe('complete');
+    expect(session.completed).toBe(true);
     expect(message.content).toMatch(/optimal solution/i);
     expect(message.visualization).toBeUndefined();
     expect(mocks.saveSession).toHaveBeenLastCalledWith(
-      expect.objectContaining({ stage: 'complete' }),
+      expect.objectContaining({ completed: true }),
     );
   });
 
   it('rejects further messages after the session is complete', async () => {
     mocks.getSession.mockResolvedValue({
       ...sessionFixture,
-      stage: 'complete',
+      completed: true,
     });
 
     await expect(
@@ -240,13 +218,9 @@ describe('coaching orchestration', () => {
     expect(mocks.saveSession).not.toHaveBeenCalled();
   });
 
-  it('keeps billable usage when a model step fails after reporting it', async () => {
+  it('keeps the learner message when a model step fails', async () => {
     mocks.getSession.mockResolvedValue(sessionFixture);
-    mocks.draft.mockImplementationOnce(async (...args: unknown[]) => {
-      const recordUsage = args[5] as (usage: typeof sessionUsageFixture) => void;
-      recordUsage(sessionUsageFixture);
-      throw new Error('Guard connection failed.');
-    });
+    mocks.draft.mockRejectedValueOnce(new Error('Coach connection failed.'));
 
     await expect(
       respondToLearner({
@@ -254,12 +228,17 @@ describe('coaching orchestration', () => {
         content: 'I traced the smallest case.',
         settings,
       }),
-    ).rejects.toThrow('Guard connection failed.');
+    ).rejects.toThrow('Coach connection failed.');
 
-    expect(mocks.saveSession).toHaveBeenCalledTimes(2);
+    expect(mocks.saveSession).toHaveBeenCalledOnce();
     expect(mocks.saveSession).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        usage: expect.objectContaining({ modelCalls: 2 }),
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'user',
+            content: 'I traced the smallest case.',
+          }),
+        ]),
       }),
     );
   });

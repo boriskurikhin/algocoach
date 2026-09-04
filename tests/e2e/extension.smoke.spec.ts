@@ -3,7 +3,7 @@ import path from 'node:path';
 import { problemAnalysisFixture } from '../fixtures/domain';
 
 test('loads the packaged settings and side-panel surfaces', async () => {
-  test.setTimeout(70_000);
+  test.setTimeout(30_000);
   const extensionPath = path.resolve('.output/chrome-mv3');
   let context: BrowserContext | undefined;
 
@@ -29,7 +29,7 @@ test('loads the packaged settings and side-panel surfaces', async () => {
     const options = await context.newPage();
     await options.goto(`chrome-extension://${extensionId}/options.html`);
     await expect(options.getByRole('heading', { name: 'Settings' })).toBeVisible();
-    await expect(options.getByRole('heading', { name: 'OpenAI' })).toBeVisible();
+    await expect(options.getByRole('heading', { name: 'Connection' })).toBeVisible();
     await expect(
       options.getByRole('heading', { name: 'Learner memory' }),
     ).toBeVisible();
@@ -37,20 +37,16 @@ test('loads the packaged settings and side-panel surfaces', async () => {
     const sidePanel = await context.newPage();
     await sidePanel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
     await expect(sidePanel.getByRole('heading', { name: 'Algo Coach' })).toBeVisible();
-    await expect(sidePanel.getByText(/protects productive struggle/i)).toBeVisible();
 
     await serviceWorker.evaluate(`
       chrome.storage.local.set({
         'socratic-coach:settings': {
-          apiKey: 'sk-e2e-placeholder',
-          model: 'gpt-5.6-sol',
-          reasoningEffort: 'high',
-          reasoningMode: 'standard'
+          apiKey: 'sk-e2e-placeholder'
         }
       })
     `);
     await context.route('https://api.openai.com/v1/responses', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 31_000));
+      await new Promise((resolve) => setTimeout(resolve, 250));
       const response = {
         id: 'resp_e2e',
         object: 'response',
@@ -112,31 +108,37 @@ test('loads the packaged settings and side-panel surfaces', async () => {
       );
     await manualEntry.getByRole('button', { name: 'Study pasted problem' }).click();
     await expect(sidePanel.getByText(/I’ve read “Delayed test problem.”/)).toBeVisible({
-      timeout: 40_000,
+      timeout: 15_000,
     });
-    await expect(sidePanel.getByText(/1\.3K tokens · ≈\$0\.010/)).toBeVisible();
+    await expect(
+      sidePanel.getByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|tokens)\b/i),
+    ).toHaveCount(0);
 
     await sidePanel.setViewportSize({ width: 420, height: 320 });
     const brandHeader = sidePanel.locator('.panel-header');
     const sessionHeader = sidePanel.locator('.session-heading');
     const sessionSurface = sessionHeader.locator('.session-heading-surface');
     const mascot = brandHeader.locator('.coach-mascot');
+    const expectSessionBelowBrand = async () => {
+      await expect
+        .poll(async () => {
+          const brandBox = await brandHeader.boundingBox();
+          const sessionBox = await sessionHeader.boundingBox();
+          if (!brandBox || !sessionBox) return Number.POSITIVE_INFINITY;
+          return Math.abs(sessionBox.y - (brandBox.y + brandBox.height));
+        })
+        .toBeLessThanOrEqual(1);
+      await expect
+        .poll(() =>
+          sessionSurface.evaluate((element) =>
+            Number.parseFloat(getComputedStyle(element).paddingLeft),
+          ),
+        )
+        .toBe(0);
+    };
+
     await sidePanel.evaluate(() => window.scrollTo(0, 0));
-    await expect
-      .poll(async () => {
-        const brandBox = await brandHeader.boundingBox();
-        const sessionBox = await sessionHeader.boundingBox();
-        if (!brandBox || !sessionBox) return Number.POSITIVE_INFINITY;
-        return Math.abs(sessionBox.y - (brandBox.y + brandBox.height));
-      })
-      .toBeLessThanOrEqual(1);
-    await expect
-      .poll(() =>
-        sessionSurface.evaluate((element) =>
-          Number.parseFloat(getComputedStyle(element).paddingLeft),
-        ),
-      )
-      .toBe(0);
+    await expectSessionBelowBrand();
     await expect
       .poll(() =>
         sessionSurface.evaluate(
@@ -183,21 +185,7 @@ test('loads the packaged settings and side-panel surfaces', async () => {
       .toBe(true);
 
     await sidePanel.evaluate(() => window.scrollTo(0, 0));
-    await expect
-      .poll(async () => {
-        const brandBox = await brandHeader.boundingBox();
-        const sessionBox = await sessionHeader.boundingBox();
-        if (!brandBox || !sessionBox) return Number.POSITIVE_INFINITY;
-        return Math.abs(sessionBox.y - (brandBox.y + brandBox.height));
-      })
-      .toBeLessThanOrEqual(1);
-    await expect
-      .poll(() =>
-        sessionSurface.evaluate((element) =>
-          Number.parseFloat(getComputedStyle(element).paddingLeft),
-        ),
-      )
-      .toBe(0);
+    await expectSessionBelowBrand();
     await expect(
       brandHeader.getByRole('heading', { name: 'Algo Coach' }),
     ).toBeVisible();

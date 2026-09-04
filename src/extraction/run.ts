@@ -1,16 +1,14 @@
 import { browser } from 'wxt/browser';
 import { adapterForUrl, isLikelyProblem } from './recognize';
 import { extractProblemFromDocument } from './extract-in-page';
-import { ProblemContextSchema, type ProblemContext } from './schema';
+import {
+  PAGE_ACCESS_DENIED_MESSAGE,
+  ProblemContextSchema,
+  type ActiveProblemResult,
+  type ProblemContext,
+} from './schema';
 
-const PAGE_ACCESS_ERROR =
-  'Page access was not granted. Click the extension icon on this tab and try again.';
 const LEETCODE_RETRY_DELAYS_MS = [0, 500, 1_000] as const;
-
-export interface ActiveProblemResult {
-  context: ProblemContext;
-  likelyProblem: boolean;
-}
 
 export async function extractActiveProblem(): Promise<ActiveProblemResult> {
   const [tab] = await browser.tabs.query({
@@ -23,7 +21,7 @@ export async function extractActiveProblem(): Promise<ActiveProblemResult> {
   // Chrome hides the URL until the extension may read the tab, so an absent
   // URL means access, not a missing page.
   if (!tab.url) {
-    throw new Error(PAGE_ACCESS_ERROR);
+    throw new Error(PAGE_ACCESS_DENIED_MESSAGE);
   }
   if (!/^https?:/.test(tab.url)) {
     throw new Error('Chrome does not allow problem extraction on this page.');
@@ -42,7 +40,7 @@ export async function extractActiveProblem(): Promise<ActiveProblemResult> {
         args: [config],
       });
     } catch {
-      throw new Error(PAGE_ACCESS_ERROR);
+      throw new Error(PAGE_ACCESS_DENIED_MESSAGE);
     }
 
     const parsed = ProblemContextSchema.safeParse(results[0]?.result);

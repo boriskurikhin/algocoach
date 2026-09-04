@@ -35,24 +35,25 @@ describe('coach response drafting', () => {
       ],
     });
 
-    const result = await draftCoachResponse(
-      sessionFixture,
-      learnerSnapshotFixture,
+    const result = await draftCoachResponse({
+      session: sessionFixture,
+      learner: learnerSnapshotFixture,
       settings,
-    );
+    });
 
     expect(result.reply).toBe('Which unit is not consumed?');
     expect(result.visualization).toEqual(sceneFixture);
     expect(mocks.parse.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
-        model: 'gpt-5.6-sol',
+        model: 'gpt-5.6-terra',
         service_tier: 'default',
         prompt_cache_key: 'socratic-coach:coach:session-1',
         prompt_cache_options: { mode: 'implicit', ttl: '30m' },
         store: false,
         parallel_tool_calls: false,
         text: { verbosity: 'low' },
-        max_output_tokens: 48_000,
+        reasoning: { effort: 'medium', mode: 'standard' },
+        max_output_tokens: 10_000,
       }),
     );
   });
@@ -69,11 +70,26 @@ describe('coach response drafting', () => {
       ],
     });
 
-    const result = await draftCoachResponse(
-      sessionFixture,
-      learnerSnapshotFixture,
+    const result = await draftCoachResponse({
+      session: sessionFixture,
+      learner: learnerSnapshotFixture,
       settings,
-    );
+    });
     expect(result.reply).toBe(sceneFixture.question);
+  });
+
+  it('rejects an empty response instead of inventing an unrelated task', async () => {
+    mocks.parse.mockResolvedValue({
+      output_text: '',
+      output: [],
+    });
+
+    await expect(
+      draftCoachResponse({
+        session: sessionFixture,
+        learner: learnerSnapshotFixture,
+        settings,
+      }),
+    ).rejects.toThrow(/empty response/i);
   });
 });
