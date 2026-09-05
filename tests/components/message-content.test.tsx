@@ -34,6 +34,43 @@ describe('message code snippets', () => {
     expect(container.textContent).not.toContain('`');
   });
 
+  it('renders double-asterisk emphasis as bold text', () => {
+    const { container } = render(
+      <MessageContent
+        content={
+          'Use the Fenwick tree over **hair values** and count earlier values ' +
+          '**strictly greater than v**.'
+        }
+      />,
+    );
+
+    expect(
+      Array.from(container.querySelectorAll('strong')).map((node) => node.textContent),
+    ).toEqual(['hair values', 'strictly greater than v']);
+    expect(container.textContent).not.toContain('**');
+  });
+
+  it('keeps emphasis markers literal inside inline code', () => {
+    const { container } = render(
+      <MessageContent content={'Compare `**value**` with the **cap value**.'} />,
+    );
+
+    expect(container.querySelector('code.inline-code')).toHaveTextContent('**value**');
+    expect(container.querySelector('strong')).toHaveTextContent('cap value');
+  });
+
+  it('renders inline code and math inside bold text', () => {
+    const { container } = render(
+      <MessageContent
+        content={'Use the **bucket for `v`, which contributes $c_v$**.'}
+      />,
+    );
+
+    const strong = container.querySelector('strong');
+    expect(strong?.querySelector('code.inline-code')).toHaveTextContent('v');
+    expect(strong?.querySelector('.katex')).not.toBeNull();
+  });
+
   it('does not typeset dollar signs inside inline code', () => {
     const { container } = render(
       <MessageContent content={'Keep `$10` literal, but typeset $n^2$.'} />,

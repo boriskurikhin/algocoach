@@ -10,7 +10,8 @@ and privacy are acceptance criteria.
    permission cannot work.
 3. Add runtime validation at any new DOM, message, storage, model, or tool
    boundary.
-4. Add a policy scenario when changing prompts or hint progression.
+4. Add a policy scenario when changing prompts, coaching decisions, or
+   completion behavior.
 5. Use synthetic statements, keys, code, and learner evidence in tests.
 
 Run:

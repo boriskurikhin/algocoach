@@ -132,6 +132,8 @@ export default function App() {
   const portRef = useRef<CoachPort | null>(null);
   const connectPortRef = useRef<() => CoachPort | null>(() => null);
   const requestInFlightRef = useRef(false);
+  const latestCoachReplyRef = useRef<HTMLElement | null>(null);
+  const shouldScrollToCoachReplyRef = useRef(false);
 
   const finishRequest = useCallback(() => {
     requestInFlightRef.current = false;
@@ -147,6 +149,7 @@ export default function App() {
   );
 
   const applySession = useCallback((session: RestorableSession) => {
+    shouldScrollToCoachReplyRef.current = false;
     setSessionId(session.sessionId);
     setExtraction({ context: session.problem, likelyProblem: true });
     setSessionComplete(session.completed);
@@ -154,6 +157,21 @@ export default function App() {
     setClock(Date.now());
     setExtracting(false);
   }, []);
+
+  useEffect(() => {
+    if (!shouldScrollToCoachReplyRef.current) return;
+
+    shouldScrollToCoachReplyRef.current = false;
+    if (!latestCoachReplyRef.current) return;
+
+    const prefersReducedMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    latestCoachReplyRef.current.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  }, [messages]);
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -277,6 +295,7 @@ export default function App() {
         applySession(event);
       } else if (event.type === 'coach:reply') {
         finishRequest();
+        shouldScrollToCoachReplyRef.current = true;
         setMessages((value) => [...value, event.message]);
         setSessionComplete(event.completed);
       } else if (event.type === 'coach:canceled') {
@@ -388,6 +407,7 @@ export default function App() {
     const now = Date.now();
     setError('');
     setSessionComplete(false);
+    shouldScrollToCoachReplyRef.current = false;
     setMessages([]);
     setClock(now);
     setStatus({
@@ -437,6 +457,7 @@ export default function App() {
         sessionId,
       });
       setSessionId(null);
+      shouldScrollToCoachReplyRef.current = false;
       setMessages([]);
       setSessionComplete(false);
       finishRequest();
@@ -612,7 +633,15 @@ export default function App() {
 
           <section className="conversation" aria-label="Coaching conversation">
             {messages.map((message) => (
-              <article className={`message message-${message.role}`} key={message.id}>
+              <article
+                className={`message message-${message.role}`}
+                key={message.id}
+                ref={
+                  message.role === 'assistant' && message.id === messages.at(-1)?.id
+                    ? latestCoachReplyRef
+                    : undefined
+                }
+              >
                 <p className="message-author">
                   {message.role === 'assistant' ? 'Coach' : 'You'}
                 </p>

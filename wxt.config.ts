@@ -43,6 +43,7 @@ const extensionIcons = {
 };
 
 export default defineConfig({
+  outDir: 'dist',
   modules: ['@wxt-dev/module-react'],
   vite: () => ({ plugins: [katexWoff2Only()] }),
   manifest: {

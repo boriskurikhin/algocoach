@@ -207,6 +207,7 @@
 }
 
 .message {
+  scroll-margin-top: calc(var(--coach-mascot-size) + var(--space-6));
   padding: var(--space-4) 0;
   border-bottom: 1px solid var(--border);
 }

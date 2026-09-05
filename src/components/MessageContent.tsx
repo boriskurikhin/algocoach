@@ -19,9 +19,10 @@ interface MessageContentProps {
 type TextPart = { type: 'text'; value: string };
 type CodePart = { type: 'code'; value: string; language: string };
 type InlineCodePart = { type: 'inline-code'; value: string };
+type StrongPart = { type: 'strong'; value: string };
 
 type MessagePart = TextPart | CodePart;
-type InlinePart = TextPart | InlineCodePart;
+type InlinePart = TextPart | InlineCodePart | StrongPart;
 
 const aliases: Record<string, string> = {
   'c++': 'cpp',
@@ -76,11 +77,14 @@ function parseMessage(content: string): MessagePart[] {
   );
 }
 
-function parseInlineCode(content: string): InlinePart[] {
-  return splitDelimited<InlineCodePart>(
+function parseInlineFormatting(content: string): InlinePart[] {
+  return splitDelimited<InlineCodePart | StrongPart>(
     content,
-    /(?<![\\`])`([^`\n]+)`(?!`)/g,
-    (match) => ({ type: 'inline-code', value: match[1] ?? '' }),
+    /(?<![\\`])`([^`\n]+)`(?!`)|(?<![\\*])\*\*(?=\S)([^\n]*?\S)\*\*(?!\*)/g,
+    (match) =>
+      match[1] !== undefined
+        ? { type: 'inline-code', value: match[1] }
+        : { type: 'strong', value: match[2] ?? '' },
   );
 }
 
@@ -120,20 +124,31 @@ function CodeSnippet({ value, language }: { value: string; language: string }) {
   );
 }
 
+function renderInlineFormatting(value: string, keyPrefix: string): ReactNode[] {
+  return parseInlineFormatting(value).map((part, index) => {
+    const key = `${keyPrefix}-${index}`;
+    if (part.type === 'inline-code') {
+      return (
+        <code className="inline-code" key={`inline-code-${key}`}>
+          {part.value}
+        </code>
+      );
+    }
+    if (part.type === 'strong') {
+      return (
+        <strong key={`strong-${key}`}>
+          {renderInlineFormatting(part.value, `${key}-strong`)}
+        </strong>
+      );
+    }
+    return (
+      <MathText className="message-prose" key={`prose-${key}`} value={part.value} />
+    );
+  });
+}
+
 function Prose({ value, partIndex }: { value: string; partIndex: number }) {
-  return parseInlineCode(value).map((part, index) =>
-    part.type === 'inline-code' ? (
-      <code className="inline-code" key={`inline-code-${partIndex}-${index}`}>
-        {part.value}
-      </code>
-    ) : (
-      <MathText
-        className="message-prose"
-        key={`prose-${partIndex}-${index}`}
-        value={part.value}
-      />
-    ),
-  );
+  return renderInlineFormatting(value, `${partIndex}`);
 }
 
 export function MessageContent({ content }: MessageContentProps) {

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PAGE_ACCESS_DENIED_MESSAGE } from '../../src/extraction/schema';
 import {
   problemFixture,
@@ -57,6 +57,24 @@ vi.mock('wxt/browser', () => ({
 
 import App from '../../entrypoints/sidepanel/App';
 
+const scrollIntoView = vi.fn();
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  'scrollIntoView',
+);
+
+afterAll(() => {
+  if (originalScrollIntoView) {
+    Object.defineProperty(
+      HTMLElement.prototype,
+      'scrollIntoView',
+      originalScrollIntoView,
+    );
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  }
+});
+
 function emit(message: unknown) {
   for (const listener of mocks.messageListeners) listener(message);
 }
@@ -106,6 +124,11 @@ describe('side panel coaching flow', () => {
     mocks.contains.mockResolvedValue(true);
     mocks.request.mockResolvedValue(true);
     mocks.sendMessage.mockImplementation(runtimeResponse);
+    scrollIntoView.mockReset();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
   });
 
   it('moves from local extraction through a guarded response', async () => {
@@ -201,6 +224,11 @@ describe('side panel coaching flow', () => {
     expect(document.querySelector('.token.builtin')).toHaveTextContent('min');
     expect(screen.getByText('One batch')).toBeInTheDocument();
     expect(screen.getByText(sceneFixture.question)).toBeInTheDocument();
+    expect(scrollIntoView).toHaveBeenCalledOnce();
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
     expect(
       screen.getByLabelText('What would you like to work on?'),
     ).toBeInTheDocument();

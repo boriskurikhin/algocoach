@@ -4,7 +4,7 @@ import { problemAnalysisFixture } from '../fixtures/domain';
 
 test('loads the packaged settings and side-panel surfaces', async () => {
   test.setTimeout(30_000);
-  const extensionPath = path.resolve('.output/chrome-mv3');
+  const extensionPath = path.resolve('dist/chrome-mv3');
   let context: BrowserContext | undefined;
 
   try {

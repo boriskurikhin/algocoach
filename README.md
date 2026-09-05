@@ -133,7 +133,7 @@ Then:
 1. open `chrome://extensions`;
 2. enable **Developer mode**;
 3. click **Load unpacked**;
-4. choose `.output/chrome-mv3`;
+4. choose `dist/chrome-mv3`;
 5. pin the extension and click its icon on a problem page;
 6. open **Settings**, save the API key, and optionally test it.
 
@@ -202,9 +202,13 @@ Important locations:
 - `sidePanel` — keep coaching beside the problem;
 - `storage` — settings, session state, and learner memory;
 - `https://api.openai.com/*` — the only persistent network host permission.
+- `https://*/*` and `http://*/*` — optional host patterns used only when the
+  learner explicitly grants lasting access to one problem site.
 
-The extension intentionally does not request `<all_urls>`, debugger access,
-clipboard access, site-editor access, or background page surveillance.
+The extension does not request all-site access at installation and never
+receives an optional site's access without a separate user gesture. It does not
+request debugger access, clipboard access, site-editor access, or background
+page surveillance.
 
 ## Site support and limitations
 

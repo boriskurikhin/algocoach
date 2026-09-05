@@ -6,9 +6,9 @@ import {
 } from './schemas';
 import type { CoachModel, ModelReasoningEffort } from './models';
 
-export type ModelTask = 'analysis' | 'coach' | 'guard';
+type ModelTask = 'analysis' | 'coach' | 'guard';
 
-export interface ModelReasoningPlan {
+interface ModelReasoningPlan {
   model: CoachModel;
   effort: ModelReasoningEffort;
   maxOutputTokens: number;
