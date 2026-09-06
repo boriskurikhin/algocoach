@@ -52,7 +52,7 @@ describe('settings page', () => {
     expect(screen.getByText(/stored in this browser profile/i)).toBeInTheDocument();
     expect(screen.getByText(/does not assign intelligence/i)).toBeInTheDocument();
     expect(
-      screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|reasoning ceiling)\b/i),
+      screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|Astra|reasoning ceiling)\b/i),
     ).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('API key'), {

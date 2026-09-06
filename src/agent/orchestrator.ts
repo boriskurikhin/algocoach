@@ -144,15 +144,20 @@ export async function respondToLearner(
   });
 
   if (profile.personalizationEnabled && guarded.profileObservations.length > 0) {
-    await saveLearnerProfile(
-      applyProfileObservations(
-        profile,
-        guarded.profileObservations.map((observation) => ({
-          ...observation,
-          problemKey: observation.problemKey || withUser.problemKey,
-        })),
-      ),
-    );
+    try {
+      await saveLearnerProfile(
+        applyProfileObservations(
+          profile,
+          guarded.profileObservations.map((observation) => ({
+            ...observation,
+            problemKey: observation.problemKey || withUser.problemKey,
+          })),
+        ),
+      );
+    } catch {
+      // Personalization is optional: a quota or storage failure must not hide
+      // an otherwise valid coaching response.
+    }
   }
 
   const assistantMessage = ChatMessageSchema.parse({

@@ -111,7 +111,7 @@ test('loads the packaged settings and side-panel surfaces', async () => {
       timeout: 15_000,
     });
     await expect(
-      sidePanel.getByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|tokens)\b/i),
+      sidePanel.getByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|Astra|tokens)\b/i),
     ).toHaveCount(0);
 
     await sidePanel.setViewportSize({ width: 420, height: 320 });

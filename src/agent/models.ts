@@ -1,3 +1,5 @@
-export type CoachModel = 'gpt-5.6-luna' | 'gpt-5.6-terra' | 'gpt-5.6-sol';
+export const COACH_MODEL = 'gpt-6-astra' as const;
+
+export type CoachModel = typeof COACH_MODEL;
 
 export type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';

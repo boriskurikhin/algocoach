@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createEmptyLearnerProfile } from '../../src/learner/update-profile';
+import { serializedByteLength } from '../../src/storage/size';
 import { settingsFixture } from '../fixtures/openai';
 
 const mocks = vi.hoisted(() => {
@@ -26,12 +28,35 @@ vi.mock('wxt/browser', () => ({
 }));
 
 import {
+  compactLearnerProfile,
   exportLocalData,
   getSettings,
+  MAX_AUTO_PROFILE_ENTRIES,
   restrictLocalStorageToTrustedContexts,
+  saveLearnerProfile,
   saveSettings,
 } from '../../src/storage/local';
 import { createOpenAIClient, safeOpenAIError } from '../../src/agent/openai-client';
+
+const knowledgeEstimate = (
+  lastObservedAt: number,
+  options: { pinned?: boolean; evidenceCount?: number } = {},
+) => ({
+  level: 'practicing' as const,
+  confidence: 0.8,
+  sampleCount: 12,
+  demonstratedCount: 2,
+  lastObservedAt,
+  pinned: options.pinned ?? false,
+  evidence: Array.from({ length: options.evidenceCount ?? 0 }, (_, index) => ({
+    id: `${lastObservedAt}-${index}`,
+    at: lastObservedAt + index,
+    type: 'demonstrated' as const,
+    note: 'x'.repeat(300),
+    problemKey: `https://example.com/${'p'.repeat(450)}`,
+    supports: true,
+  })),
+});
 
 describe('local credential and profile storage', () => {
   beforeEach(() => {
@@ -57,6 +82,43 @@ describe('local credential and profile storage', () => {
     const exported = await exportLocalData();
     expect(exported).not.toContain('sk-secret-test-value');
     expect(JSON.parse(exported).settings.hasApiKey).toBe(true);
+  });
+
+  it('bounds automatically inferred entries while preserving pinned corrections', async () => {
+    const profile = createEmptyLearnerProfile(0);
+    for (let index = 0; index <= MAX_AUTO_PROFILE_ENTRIES; index += 1) {
+      profile.concepts[`concept-${index}`] = knowledgeEstimate(index);
+    }
+    profile.concepts['learner-pinned'] = knowledgeEstimate(0, { pinned: true });
+
+    const saved = await saveLearnerProfile(profile);
+
+    expect(saved.concepts['concept-0']).toBeUndefined();
+    expect(saved.concepts[`concept-${MAX_AUTO_PROFILE_ENTRIES}`]).toBeDefined();
+    expect(saved.concepts['learner-pinned']).toMatchObject({ pinned: true });
+    expect(Object.values(saved.concepts).filter(({ pinned }) => !pinned)).toHaveLength(
+      MAX_AUTO_PROFILE_ENTRIES,
+    );
+  });
+
+  it('drops old detail before exceeding the learner-profile byte budget', () => {
+    const profile = createEmptyLearnerProfile(0);
+    profile.concepts.old = knowledgeEstimate(1, { evidenceCount: 12 });
+    profile.concepts.current = knowledgeEstimate(100, { evidenceCount: 12 });
+    profile.concepts.pinned = knowledgeEstimate(0, {
+      pinned: true,
+      evidenceCount: 12,
+    });
+    const maxBytes = 1_500;
+
+    const compacted = compactLearnerProfile(profile, {
+      maxAutoEntries: 10,
+      maxBytes,
+    });
+
+    expect(serializedByteLength(compacted)).toBeLessThanOrEqual(maxBytes);
+    expect(compacted.concepts.pinned).toBeDefined();
+    expect(compacted.concepts.old).toBeUndefined();
   });
 
   it('fails closed without a key and never exposes arbitrary error text', () => {

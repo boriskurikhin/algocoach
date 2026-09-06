@@ -190,7 +190,7 @@ describe('side panel coaching flow', () => {
       screen.getByText('Thinking through what would help next…'),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|tokens)\b/i),
+      screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|Astra|tokens)\b/i),
     ).not.toBeInTheDocument();
     expect(mocks.postMessage).toHaveBeenLastCalledWith({
       type: 'session:user-message',
@@ -404,7 +404,7 @@ describe('side panel coaching flow', () => {
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Start coaching' }));
       expect(screen.getByText('Reading the statement…')).toBeInTheDocument();
-      expect(screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol)\b/i)).toBeNull();
+      expect(screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|Astra)\b/i)).toBeNull();
       expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
 
       act(() => vi.advanceTimersByTime(4_000));

@@ -4,7 +4,7 @@ import {
   PROBLEM_ANALYSIS_MAX_OUTPUT_TOKENS,
   RESPONSE_GUARD_MAX_OUTPUT_TOKENS,
 } from './schemas';
-import type { CoachModel, ModelReasoningEffort } from './models';
+import { COACH_MODEL, type CoachModel, type ModelReasoningEffort } from './models';
 
 type ModelTask = 'analysis' | 'coach' | 'guard';
 
@@ -36,12 +36,6 @@ function effortForRating(rating: number): ModelReasoningEffort {
   return 'max';
 }
 
-function modelForRating(rating: number): CoachModel {
-  if (rating <= 1_200) return 'gpt-5.6-luna';
-  if (rating <= 1_900) return 'gpt-5.6-terra';
-  return 'gpt-5.6-sol';
-}
-
 function ratingForReasoning(problem: ProblemContext): number | null {
   if (problem.codeforcesRating) return problem.codeforcesRating.value;
 
@@ -67,7 +61,7 @@ export function reasoningPlanForRating(
   const effectiveRating = rating ?? UNKNOWN_PROBLEM_RATING;
   const effort = effortForRating(effectiveRating);
   return {
-    model: modelForRating(effectiveRating),
+    model: COACH_MODEL,
     effort,
     maxOutputTokens: OUTPUT_BUDGETS[effort][task],
   };

@@ -37,7 +37,7 @@ describe('extension trust boundaries', () => {
     const publicValue = RuntimeResultSchemas['settings:get'].parse({
       hasApiKey: true,
       apiKey: 'sk-must-not-cross-the-message-boundary',
-      model: 'gpt-5.6-sol',
+      model: 'gpt-6-astra',
       reasoningEffort: 'high',
       reasoningMode: 'standard',
     });

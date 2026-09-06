@@ -15,7 +15,7 @@ manifesto is the product contract.
   CF-equivalent estimate after studying the problem.
 - Uses a conservative semantic fallback for other problem-setting sites.
 - Lets the learner paste a statement when page recognition is uncertain.
-- Privately builds a solution-aware coaching map with GPT-5.6 Sol.
+- Privately builds a solution-aware coaching map with GPT-6 Astra.
 - Runs a separate safety and completion gate before any response reaches the
   learner.
 - Recognizes when the learner has demonstrated an optimal solution, confirms
@@ -57,7 +57,10 @@ never cross into the problem page.
 
 The private coaching map and chat session live in session-scoped extension
 storage. The learner profile persists locally and can be inspected, corrected,
-pinned, exported, disabled, or erased.
+pinned, exported, disabled, or erased. Session history is bounded by both count
+and serialized size. Automatically inferred profile entries are capped and
+least-recent unpinned memory is pruned under size pressure; explicit pinned
+corrections are retained ahead of inferred estimates.
 
 ## Coaching behavior
 
@@ -84,12 +87,12 @@ The user pays OpenAI directly under their own account.
 
 Requests use standard processing instead of the 2×-priced Fast tier. Reasoning
 effort and output budgets scale from extracted site difficulty or the private
-Codeforces-equivalent estimate. Easy, Bronze, and roughly ≤1200 problems use
-GPT-5.6 Luna at low effort; problems through 1900 use Terra; and harder problems
-use Sol. Unrated problems start with the conservative Terra/medium analysis
-tier, then use that analysis's estimate for coaching. Problems rated 2500+ use
-xhigh, and 3000+ problems use max. Stable cache keys improve reuse of repeated
-prompt prefixes.
+Codeforces-equivalent estimate. Every request uses GPT-6 Astra: Easy, Bronze,
+and roughly ≤1200 problems use low effort; problems through 1900 use medium;
+harder problems use high. Unrated problems start with a conservative medium
+analysis tier, then use that analysis's estimate for coaching. Problems rated
+2500+ use xhigh, and 3000+ problems use max. Stable cache keys improve reuse of
+repeated prompt prefixes.
 
 Maximum reasoning/output budgets remain 64k tokens for private analysis, 48k
 for a coaching draft, and 24k for the safety pass. Easier tiers receive smaller
@@ -121,7 +124,7 @@ Requirements:
 
 - Node.js 22 or newer;
 - Chrome 116 or newer;
-- an OpenAI API key with access to GPT-5.6 Luna, Terra, and Sol.
+- an OpenAI API key with access to GPT-6 Astra.
 
 ```sh
 npm install

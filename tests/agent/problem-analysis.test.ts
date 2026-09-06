@@ -35,7 +35,7 @@ describe('private problem analysis', () => {
     ).resolves.toEqual(problemAnalysisFixture);
 
     const request = mocks.parse.mock.calls[0]?.[0];
-    expect(request.model).toBe('gpt-5.6-terra');
+    expect(request.model).toBe('gpt-6-astra');
     expect(request.store).toBe(false);
     expect(request.service_tier).toBe('default');
     expect(request.prompt_cache_key).toBe('socratic-coach:analysis');

@@ -170,6 +170,39 @@ describe('coaching orchestration', () => {
     expect(mocks.saveSession).toHaveBeenCalledTimes(2);
   });
 
+  it('returns the guarded reply when optional profile persistence fails', async () => {
+    mocks.getSession.mockResolvedValue(sessionFixture);
+    mocks.draft.mockResolvedValue({ reply: 'Candidate text' });
+    mocks.guard.mockResolvedValue({
+      safeReply: 'Trace the smallest case first.',
+      solutionStatus: 'in-progress',
+      allowVisualization: false,
+      profileObservations: [
+        {
+          dimension: 'concept',
+          key: 'invariants',
+          evidenceType: 'observed',
+          note: 'The learner attempted to state an invariant.',
+          supports: true,
+          confidence: 0.7,
+          knowledgeLevel: 'practicing',
+          problemKey: null,
+        },
+      ],
+    });
+    mocks.saveProfile.mockRejectedValueOnce(new Error('QUOTA_BYTES quota exceeded'));
+
+    const { session, message } = await respondToLearner({
+      sessionId: sessionFixture.id,
+      content: 'I think this value stays fixed.',
+      settings,
+    });
+
+    expect(message.content).toBe('Trace the smallest case first.');
+    expect(session.messages.at(-1)).toEqual(message);
+    expect(mocks.saveSession).toHaveBeenCalledTimes(2);
+  });
+
   it('persists an optimal solution as a completed terminal session', async () => {
     mocks.getSession.mockResolvedValue(sessionFixture);
     mocks.draft.mockResolvedValue({
