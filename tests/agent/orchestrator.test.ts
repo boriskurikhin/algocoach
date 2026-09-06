@@ -8,6 +8,7 @@ import {
   sceneFixture,
   sessionFixture,
 } from '../fixtures/domain';
+import { settingsFixture } from '../fixtures/openai';
 
 const mocks = vi.hoisted(() => ({
   analyze: vi.fn(),
@@ -39,12 +40,15 @@ vi.mock('../../src/storage/session', () => ({
 
 import { respondToLearner, startCoachingSession } from '../../src/agent/orchestrator';
 
-const settings = { apiKey: 'test-key' };
+const settings = { ...settingsFixture, apiKey: 'test-key' };
 
 describe('coaching orchestration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getProfile.mockResolvedValue(createEmptyLearnerProfile(1));
+    mocks.getProfile.mockResolvedValue({
+      ...createEmptyLearnerProfile(1),
+      personalizationEnabled: true,
+    });
     mocks.saveProfile.mockImplementation(async (profile) => profile);
     mocks.saveSession.mockImplementation(async (session) => session);
     mocks.analyze.mockResolvedValue(problemAnalysisFixture);

@@ -36,6 +36,18 @@ describe('settings page', () => {
           data: { ...publicSettings, hasApiKey: true },
         };
       }
+      if (request.type === 'settings:accept-data-use') {
+        return {
+          ok: true,
+          data: { ...publicSettings, hasDataUseConsent: true },
+        };
+      }
+      if (request.type === 'settings:revoke-data-use') {
+        return {
+          ok: true,
+          data: { ...publicSettings, hasDataUseConsent: false },
+        };
+      }
       if (request.type === 'settings:test-key') {
         return { ok: true, data: { connected: true } };
       }
@@ -52,10 +64,14 @@ describe('settings page', () => {
     expect(screen.getByText(/stored in this browser profile/i)).toBeInTheDocument();
     expect(screen.getByText(/does not assign intelligence/i)).toBeInTheDocument();
     expect(
-      screen.queryByText(/\b(?:OpenAI|GPT|Luna|Terra|Sol|Astra|reasoning ceiling)\b/i),
-    ).not.toBeInTheDocument();
+      screen.getByText(/problem analysis.*directly to OpenAI/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute(
+      'href',
+      expect.stringContaining('PRIVACY.md'),
+    );
 
-    fireEvent.change(screen.getByLabelText('API key'), {
+    fireEvent.change(screen.getByLabelText('OpenAI API key'), {
       target: { value: 'sk-user-owned' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save and test' }));
@@ -70,5 +86,65 @@ describe('settings page', () => {
       }),
     );
     expect(mocks.sendMessage).toHaveBeenCalledWith({ type: 'settings:test-key' });
+  });
+
+  it('requires data-use consent before testing a key', async () => {
+    mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
+      if (request.type === 'settings:get') {
+        return {
+          ok: true,
+          data: { ...publicSettings, hasDataUseConsent: false },
+        };
+      }
+      if (request.type === 'profile:get') {
+        return {
+          ok: true,
+          data: { profile: createEmptyLearnerProfile(1) },
+        };
+      }
+      if (request.type === 'settings:accept-data-use') {
+        return {
+          ok: true,
+          data: { ...publicSettings, hasDataUseConsent: true },
+        };
+      }
+      return { ok: false, error: 'Unexpected request.' };
+    });
+    render(<App />);
+
+    const testButton = await screen.findByRole('button', {
+      name: 'Save and test',
+    });
+    expect(testButton).toBeDisabled();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'I understand—allow OpenAI requests',
+      }),
+    );
+    await waitFor(() => expect(testButton).toBeEnabled());
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: 'settings:accept-data-use',
+    });
+  });
+
+  it('lets the learner disable future OpenAI requests', async () => {
+    render(<App />);
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Disable OpenAI requests',
+      }),
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', {
+          name: 'I understand—allow OpenAI requests',
+        }),
+      ).toBeInTheDocument();
+    });
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      type: 'settings:revoke-data-use',
+    });
   });
 });

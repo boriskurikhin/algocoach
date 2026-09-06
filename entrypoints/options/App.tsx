@@ -8,6 +8,7 @@ import {
 } from '../../src/learner/schema';
 import { errorMessage, sendExtensionRequest } from '../../src/messaging/client';
 import type { PublicSettings, RuntimeRequest } from '../../src/messaging/schema';
+import { PRIVACY_POLICY_URL } from '../../src/privacy';
 import './options.css';
 
 /** The profile requests that answer with a replacement profile. */
@@ -149,6 +150,26 @@ export default function App() {
       setNotice('The API key was removed.');
     });
 
+  const acceptDataUse = () =>
+    runAction('Could not save your data-use choice.', async () => {
+      setSettings(
+        await sendExtensionRequest({
+          type: 'settings:accept-data-use',
+        }),
+      );
+      setNotice('Data use accepted. OpenAI requests are now enabled.');
+    });
+
+  const revokeDataUse = () =>
+    runAction('Could not disable OpenAI requests.', async () => {
+      setSettings(
+        await sendExtensionRequest({
+          type: 'settings:revoke-data-use',
+        }),
+      );
+      setNotice('OpenAI requests are disabled.');
+    });
+
   const mutateProfile = async (
     request: ProfileMutation,
     fallback = 'Could not update the learner profile.',
@@ -285,11 +306,48 @@ export default function App() {
         <h1>Settings</h1>
       </header>
 
+      <section aria-labelledby="data-use-title">
+        <h2 id="data-use-title">Before you connect</h2>
+        <p>
+          Coaching sends the active problem, your messages and pasted code, a private
+          problem analysis, and—if enabled—a small learner snapshot directly to OpenAI.
+          Your API key authenticates those requests.
+        </p>
+        <p>
+          Requests use HTTPS and <code>store: false</code>. OpenAI may keep an implicit
+          prompt-prefix cache for up to 30 minutes and otherwise processes data under
+          its API terms. The full learner profile stays in this browser.
+        </p>
+        <p>
+          <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer">
+            Read the privacy policy
+          </a>
+          .
+        </p>
+        {settings?.hasDataUseConsent ? (
+          <>
+            <p className="quiet">Data use accepted.</p>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => void revokeDataUse()}
+              disabled={busy}
+            >
+              Disable OpenAI requests
+            </button>
+          </>
+        ) : (
+          <button type="button" onClick={() => void acceptDataUse()} disabled={busy}>
+            I understand—allow OpenAI requests
+          </button>
+        )}
+      </section>
+
       <section aria-labelledby="connection-title">
         <h2 id="connection-title">Connection</h2>
-        <p>The key is stored in this browser profile.</p>
+        <p>The key is stored in this browser profile and sent only to OpenAI.</p>
         <label>
-          API key
+          OpenAI API key
           <input
             type="password"
             autoComplete="off"
@@ -306,7 +364,11 @@ export default function App() {
           <button type="button" onClick={() => void save()} disabled={busy}>
             Save locally
           </button>
-          <button type="button" onClick={() => void save(true)} disabled={busy}>
+          <button
+            type="button"
+            onClick={() => void save(true)}
+            disabled={busy || !settings?.hasDataUseConsent}
+          >
             Save and test
           </button>
           {settings?.hasApiKey ? (
@@ -326,7 +388,8 @@ export default function App() {
         <h2 id="memory-title">Learner memory</h2>
         <p>
           Estimates are built from evidence, confidence, and recency. The coach does not
-          assign intelligence, personality, or moral labels.
+          assign intelligence, personality, or moral labels. If personalization is
+          enabled, only a relevant snapshot is sent to OpenAI with coaching requests.
         </p>
         <label className="toggle-row">
           <input

@@ -15,17 +15,16 @@ import {
   type ActiveProblemResult,
   type ProblemContext,
 } from '../../src/extraction/schema';
-import {
-  hasSiteAccess,
-  requestSiteAccess,
-  siteOriginPattern,
-} from '../../src/extraction/site-access';
 import { errorMessage, sendExtensionRequest } from '../../src/messaging/client';
 import {
   CoachServerEventSchema,
   type PublicSettings,
   type RestorableSession,
 } from '../../src/messaging/schema';
+import {
+  DATA_USE_CONSENT_REQUIRED_MESSAGE,
+  PRIVACY_POLICY_URL,
+} from '../../src/privacy';
 import { Whiteboard } from '../../src/visualization/Whiteboard';
 import './sidepanel.css';
 
@@ -117,8 +116,8 @@ export default function App() {
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [extraction, setExtraction] = useState<ActiveProblemResult | null>(null);
   const [extracting, setExtracting] = useState(true);
-  const [sitePattern, setSitePattern] = useState<string | null>(null);
   const [needsAccess, setNeedsAccess] = useState(false);
+  const [acceptingDataUse, setAcceptingDataUse] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
   const [manualStatement, setManualStatement] = useState('');
@@ -194,15 +193,9 @@ export default function App() {
       setExtraction(result);
       setManualOpen(!result.likelyProblem);
       setNeedsAccess(false);
-
-      // Offer a lasting grant only while this read is riding a temporary one.
-      const pattern = siteOriginPattern(result.context.source.url);
-      const granted = pattern ? await hasSiteAccess(pattern) : true;
-      setSitePattern(granted ? null : pattern);
     } catch (caught) {
       const message = errorMessage(caught, 'Could not read this page.');
       setExtraction(null);
-      setSitePattern(null);
       setManualOpen(true);
       setNeedsAccess(message === PAGE_ACCESS_DENIED_MESSAGE);
       setError(message);
@@ -219,31 +212,26 @@ export default function App() {
     return true;
   }, [applySession]);
 
-  const grantSiteAccess = () => {
-    if (!sitePattern) return;
-    setError('');
-    void requestSiteAccess(sitePattern).then(
-      (granted) => {
-        if (granted) setSitePattern(null);
-      },
-      (caught) => setError(errorMessage(caught, 'Could not grant site access.')),
-    );
-  };
-
-  // Chrome hides the URL until access exists, so the panel cannot name the site
-  // to ask for. Hand the learner Chrome's own per-site control instead.
-  const openSiteAccessSettings = () => {
-    void browser.tabs
-      .create({ url: `chrome://extensions/?id=${browser.runtime.id}` })
-      .catch((caught) =>
-        setError(errorMessage(caught, 'Could not open site access settings.')),
-      );
-  };
-
   const openSettings = () => {
     void browser.runtime
       .openOptionsPage()
       .catch((caught) => setError(errorMessage(caught, 'Could not open settings.')));
+  };
+
+  const acceptDataUse = async () => {
+    setAcceptingDataUse(true);
+    setError('');
+    try {
+      setSettings(
+        await sendExtensionRequest({
+          type: 'settings:accept-data-use',
+        }),
+      );
+    } catch (caught) {
+      setError(errorMessage(caught, 'Could not save your data-use choice.'));
+    } finally {
+      setAcceptingDataUse(false);
+    }
   };
 
   useEffect(() => {
@@ -404,6 +392,10 @@ export default function App() {
       openSettings();
       return;
     }
+    if (!settings.hasDataUseConsent) {
+      setError(DATA_USE_CONSENT_REQUIRED_MESSAGE);
+      return;
+    }
     const now = Date.now();
     setError('');
     setSessionComplete(false);
@@ -430,6 +422,10 @@ export default function App() {
   const submit = () => {
     const content = composer.trim();
     if (!content || !sessionId || status || sessionComplete) return;
+    if (!settings?.hasDataUseConsent) {
+      setError(DATA_USE_CONSENT_REQUIRED_MESSAGE);
+      return;
+    }
     const now = Date.now();
     setError('');
     setMessages((value) => [...value, localMessage(content)]);
@@ -500,6 +496,32 @@ export default function App() {
         </section>
       ) : null}
 
+      {settings?.hasApiKey && !settings.hasDataUseConsent ? (
+        <section className="notice" aria-labelledby="data-use-title">
+          <h2 id="data-use-title">Before coaching</h2>
+          <p>
+            Coaching sends the problem text and URL, your messages and pasted code, a
+            private problem analysis, and—if enabled—a small learner snapshot directly
+            to OpenAI using your key.
+          </p>
+          <p>
+            Requests use <code>store: false</code> and may use OpenAI's prompt-prefix
+            cache for up to 30 minutes.{' '}
+            <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer">
+              Privacy policy
+            </a>
+            .
+          </p>
+          <button
+            type="button"
+            onClick={() => void acceptDataUse()}
+            disabled={acceptingDataUse}
+          >
+            {acceptingDataUse ? 'Saving…' : 'I understand—allow OpenAI requests'}
+          </button>
+        </section>
+      ) : null}
+
       {!sessionId ? (
         <section aria-labelledby="problem-title">
           <div className="section-heading">
@@ -522,12 +544,9 @@ export default function App() {
           {needsAccess ? (
             <section className="notice">
               <p>
-                Chrome has not let the coach read this site yet. Open site access
-                settings, then set <strong>Site access</strong> to this site.
+                Chrome has not let the coach read this page. Reopen the panel from the
+                extension icon to grant one-time access, or paste the problem below.
               </p>
-              <button type="button" onClick={openSiteAccessSettings}>
-                Open site access settings
-              </button>
             </section>
           ) : null}
 
@@ -551,22 +570,12 @@ export default function App() {
                   {warning}
                 </p>
               ))}
-              {sitePattern ? (
-                <p className="quiet">
-                  This read used one-time access.{' '}
-                  <button
-                    className="link-button"
-                    type="button"
-                    onClick={grantSiteAccess}
-                  >
-                    Let the coach read {problem.source.host} without the icon
-                  </button>
-                </p>
-              ) : null}
               <button
                 type="button"
                 onClick={() => startSession(problem)}
-                disabled={Boolean(status) || !settings?.hasApiKey}
+                disabled={
+                  Boolean(status) || !settings?.hasApiKey || !settings.hasDataUseConsent
+                }
               >
                 Start coaching
               </button>
@@ -599,7 +608,9 @@ export default function App() {
             <button
               type="button"
               onClick={startManualSession}
-              disabled={Boolean(status) || !settings?.hasApiKey}
+              disabled={
+                Boolean(status) || !settings?.hasApiKey || !settings.hasDataUseConsent
+              }
             >
               Study pasted problem
             </button>
@@ -687,7 +698,10 @@ export default function App() {
               />
               <div className="composer-actions">
                 <span className="quiet">⌘/Ctrl + Enter</span>
-                <button type="submit" disabled={!composer.trim()}>
+                <button
+                  type="submit"
+                  disabled={!composer.trim() || !settings?.hasDataUseConsent}
+                >
                   Ask the coach
                 </button>
               </div>

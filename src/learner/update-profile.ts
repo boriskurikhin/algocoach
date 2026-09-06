@@ -38,7 +38,7 @@ export function createEmptyLearnerProfile(now = Date.now()): LearnerProfile {
     version: 1,
     createdAt: now,
     updatedAt: now,
-    personalizationEnabled: true,
+    personalizationEnabled: false,
     languages: {},
     concepts: {},
     competencies: {},

@@ -29,11 +29,7 @@ export const extensionPermissions = [
 
 export const extensionHostPermissions = ['https://api.openai.com/*'] as const;
 
-/**
- * Never granted at install. The learner grants one problem site at a time from
- * the side panel, and can revoke it from Chrome's extension settings.
- */
-export const extensionOptionalHostPermissions = ['https://*/*', 'http://*/*'] as const;
+export const extensionOptionalHostPermissions = [] as const;
 
 const extensionIcons = {
   16: 'mascot/icon-16.png',
@@ -54,7 +50,6 @@ export default defineConfig({
     minimum_chrome_version: '116',
     permissions: [...extensionPermissions],
     host_permissions: [...extensionHostPermissions],
-    optional_host_permissions: [...extensionOptionalHostPermissions],
     icons: extensionIcons,
     action: {
       default_title: 'Open Socratic Algo Coach',

@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import { z } from 'zod';
 import { LearnerProfileSchema, type LearnerProfile } from '../learner/schema';
 import { createEmptyLearnerProfile } from '../learner/update-profile';
+import { CURRENT_DATA_USE_CONSENT_VERSION } from '../privacy';
 import { serializedByteLength } from './size';
 
 const SETTINGS_KEY = 'socratic-coach:settings';
@@ -17,6 +18,7 @@ const PROFILE_COLLECTIONS = [
 ] as const;
 export const ExtensionSettingsSchema = z.object({
   apiKey: z.string().trim().max(500).default(''),
+  dataUseConsentVersion: z.number().int().nonnegative().default(0),
 });
 
 export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>;
@@ -174,6 +176,16 @@ export async function saveSettings(
 
 export async function removeApiKey(): Promise<ExtensionSettings> {
   return saveSettings({ apiKey: '' });
+}
+
+export async function acceptCurrentDataUse(): Promise<ExtensionSettings> {
+  return saveSettings({
+    dataUseConsentVersion: CURRENT_DATA_USE_CONSENT_VERSION,
+  });
+}
+
+export async function revokeDataUseConsent(): Promise<ExtensionSettings> {
+  return saveSettings({ dataUseConsentVersion: 0 });
 }
 
 export async function getLearnerProfile(): Promise<LearnerProfile> {

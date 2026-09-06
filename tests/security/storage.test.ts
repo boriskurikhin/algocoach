@@ -84,6 +84,13 @@ describe('local credential and profile storage', () => {
     expect(JSON.parse(exported).settings.hasApiKey).toBe(true);
   });
 
+  it('defaults to no data-use consent', async () => {
+    expect(await getSettings()).toMatchObject({
+      apiKey: '',
+      dataUseConsentVersion: 0,
+    });
+  });
+
   it('bounds automatically inferred entries while preserving pinned corrections', async () => {
     const profile = createEmptyLearnerProfile(0);
     for (let index = 0; index <= MAX_AUTO_PROFILE_ENTRIES; index += 1) {
@@ -125,6 +132,12 @@ describe('local credential and profile storage', () => {
     expect(() => createOpenAIClient({ ...settingsFixture, apiKey: '' })).toThrow(
       /Add an API key/,
     );
+    expect(() =>
+      createOpenAIClient({
+        ...settingsFixture,
+        dataUseConsentVersion: 0,
+      }),
+    ).toThrow(/data-use disclosure/i);
     expect(safeOpenAIError(new Error('secret internal detail'))).toBe(
       'The coach hit an internal error. Reload the extension and try again.',
     );

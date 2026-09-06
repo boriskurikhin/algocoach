@@ -13,7 +13,10 @@ import { ExtensionSettingsSchema } from '../storage/local';
 const sessionId = z.string().min(1).max(100);
 const entryKey = z.string().trim().min(1).max(100);
 
-const PublicSettingsSchema = z.object({ hasApiKey: z.boolean() });
+const PublicSettingsSchema = z.object({
+  hasApiKey: z.boolean(),
+  hasDataUseConsent: z.boolean(),
+});
 
 const RestorableSessionSchema = z.object({
   sessionId,
@@ -41,6 +44,8 @@ export const RuntimeRequestSchema = z.discriminatedUnion('type', [
     type: z.literal('settings:save'),
     settings: ExtensionSettingsSchema.partial(),
   }),
+  z.object({ type: z.literal('settings:accept-data-use') }),
+  z.object({ type: z.literal('settings:revoke-data-use') }),
   z.object({ type: z.literal('settings:remove-key') }),
   z.object({ type: z.literal('settings:test-key') }),
   z.object({ type: z.literal('problem:extract') }),
@@ -84,6 +89,8 @@ export type RuntimeRequest = z.infer<typeof RuntimeRequestSchema>;
 export const RuntimeResultSchemas = {
   'settings:get': PublicSettingsSchema,
   'settings:save': PublicSettingsSchema,
+  'settings:accept-data-use': PublicSettingsSchema,
+  'settings:revoke-data-use': PublicSettingsSchema,
   'settings:remove-key': PublicSettingsSchema,
   'settings:test-key': z.object({ connected: z.literal(true) }),
   'problem:extract': ActiveProblemResultSchema,

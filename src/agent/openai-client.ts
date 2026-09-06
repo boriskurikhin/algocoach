@@ -6,6 +6,10 @@ import {
 import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import { PAGE_ACCESS_DENIED_MESSAGE } from '../extraction/schema';
+import {
+  DATA_USE_CONSENT_REQUIRED_MESSAGE,
+  hasCurrentDataUseConsent,
+} from '../privacy';
 import type { ExtensionSettings } from '../storage/local';
 import type { CoachModel, ModelReasoningEffort } from './models';
 import { COACH_PROCESSING_TIER, OPENAI_CONNECTION_TIMEOUT_MS } from './schemas';
@@ -22,6 +26,9 @@ const CONTENT_FILTER_ERROR =
 export function createOpenAIClient(settings: ExtensionSettings): OpenAI {
   if (!settings.apiKey) {
     throw new Error('Add an API key in Settings before starting.');
+  }
+  if (!hasCurrentDataUseConsent(settings.dataUseConsentVersion)) {
+    throw new Error(DATA_USE_CONSENT_REQUIRED_MESSAGE);
   }
 
   return new OpenAI({
@@ -171,6 +178,7 @@ export function safeOpenAIError(error: unknown): string {
       PAGE_ACCESS_DENIED_MESSAGE,
       'The page did not yield',
       'This coaching session expired',
+      DATA_USE_CONSENT_REQUIRED_MESSAGE,
     ];
     if (safeMessages.some((prefix) => error.message.startsWith(prefix))) {
       return error.message;

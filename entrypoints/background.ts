@@ -16,12 +16,18 @@ import {
   type RuntimeResponse,
 } from '../src/messaging/schema';
 import {
+  DATA_USE_CONSENT_REQUIRED_MESSAGE,
+  hasCurrentDataUseConsent,
+} from '../src/privacy';
+import {
+  acceptCurrentDataUse,
   exportLocalData,
   getLearnerProfile,
   getSettings,
   removeApiKey,
   resetLearnerProfile,
   restrictLocalStorageToTrustedContexts,
+  revokeDataUseConsent,
   saveLearnerProfile,
   saveSettings,
   setPersonalizationEnabled,
@@ -30,7 +36,16 @@ import {
 import { clearActiveSession, getActiveSession } from '../src/storage/session';
 
 function publicSettings(settings: ExtensionSettings): PublicSettings {
-  return { hasApiKey: Boolean(settings.apiKey) };
+  return {
+    hasApiKey: Boolean(settings.apiKey),
+    hasDataUseConsent: hasCurrentDataUseConsent(settings.dataUseConsentVersion),
+  };
+}
+
+function requireDataUseConsent(settings: ExtensionSettings): void {
+  if (!hasCurrentDataUseConsent(settings.dataUseConsentVersion)) {
+    throw new Error(DATA_USE_CONSENT_REQUIRED_MESSAGE);
+  }
 }
 
 const success = (data: unknown): RuntimeResponse =>
@@ -69,9 +84,13 @@ const handlers: RuntimeHandlers = {
   'settings:get': async () => publicSettings(await getSettings()),
   'settings:save': async (request) =>
     publicSettings(await saveSettings(request.settings)),
+  'settings:accept-data-use': async () => publicSettings(await acceptCurrentDataUse()),
+  'settings:revoke-data-use': async () => publicSettings(await revokeDataUseConsent()),
   'settings:remove-key': async () => publicSettings(await removeApiKey()),
   'settings:test-key': async () => {
-    await createOpenAIClient(await getSettings()).models.list();
+    const settings = await getSettings();
+    requireDataUseConsent(settings);
+    await createOpenAIClient(settings).models.list();
     return { connected: true };
   },
   'problem:extract': () => extractActiveProblem(),
@@ -185,6 +204,7 @@ export default defineBackground(() => {
       void (async () => {
         try {
           const settings = await getSettings();
+          requireDataUseConsent(settings);
           const onStatus = (status: CoachStatus, label: string) =>
             post({ type: 'coach:status', status, label });
 

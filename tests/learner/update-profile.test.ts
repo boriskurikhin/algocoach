@@ -21,9 +21,15 @@ const observation = (
   ...overrides,
 });
 
+const enabledProfile = (now: number) => ({
+  ...createEmptyLearnerProfile(now),
+  personalizationEnabled: true,
+});
+
 describe('learner profile updates', () => {
   it('starts without assumptions', () => {
     const profile = createEmptyLearnerProfile(100);
+    expect(profile.personalizationEnabled).toBe(false);
     expect(profile.languages).toEqual({});
     expect(profile.concepts).toEqual({});
     expect(buildLearnerSnapshot(profile, [], 100)).toEqual(
@@ -36,7 +42,7 @@ describe('learner profile updates', () => {
   });
 
   it('requires repeated demonstrations before marking knowledge reliable', () => {
-    const start = createEmptyLearnerProfile(100);
+    const start = enabledProfile(100);
     const once = applyProfileObservations(start, [observation()], 200);
     expect(once.concepts.fft?.level).toBe('practicing');
 
@@ -47,7 +53,7 @@ describe('learner profile updates', () => {
 
   it('keeps self-reported knowledge distinct from demonstrated mastery', () => {
     const profile = applyProfileObservations(
-      createEmptyLearnerProfile(100),
+      enabledProfile(100),
       [
         observation({
           dimension: 'language',
@@ -93,7 +99,7 @@ describe('learner profile updates', () => {
 
   it('does not turn one difficult moment into a downgrade', () => {
     const reliable = applyProfileObservations(
-      applyProfileObservations(createEmptyLearnerProfile(100), [observation()], 200),
+      applyProfileObservations(enabledProfile(100), [observation()], 200),
       [observation()],
       300,
     );
@@ -124,7 +130,7 @@ describe('learner profile updates', () => {
 
   it('rejects fixed moral and intelligence labels', () => {
     const profile = applyProfileObservations(
-      createEmptyLearnerProfile(100),
+      enabledProfile(100),
       [
         observation({
           dimension: 'blocker',
@@ -163,7 +169,7 @@ describe('learner profile updates', () => {
       confidence: 0.7,
     });
     const profile = applyProfileObservations(
-      applyProfileObservations(createEmptyLearnerProfile(100), [behavior], 200),
+      applyProfileObservations(enabledProfile(100), [behavior], 200),
       [behavior],
       300,
     );
@@ -176,7 +182,7 @@ describe('learner profile updates', () => {
 
   it('sends a minimized snapshot rather than local evidence notes', () => {
     const profile = applyProfileObservations(
-      createEmptyLearnerProfile(100),
+      enabledProfile(100),
       [
         observation({
           note: 'PRIVATE LOCAL EVIDENCE NOTE THAT MUST NOT LEAVE STORAGE',
@@ -191,11 +197,7 @@ describe('learner profile updates', () => {
   });
 
   it('honors disabled personalization and stale confidence', () => {
-    const old = applyProfileObservations(
-      createEmptyLearnerProfile(0),
-      [observation()],
-      1,
-    );
+    const old = applyProfileObservations(enabledProfile(0), [observation()], 1);
     const staleSnapshot = buildLearnerSnapshot(old, [], 86_400_000 * 2_000);
     expect(staleSnapshot.reliableConcepts).toEqual([]);
     expect(staleSnapshot.practicingConcepts).toEqual([]);

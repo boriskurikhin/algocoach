@@ -35,9 +35,6 @@ const mocks = vi.hoisted(() => {
     postMessage,
     connect,
     openOptionsPage: vi.fn(),
-    contains: vi.fn(),
-    request: vi.fn(),
-    createTab: vi.fn(),
     messageListeners,
     disconnectListeners,
   };
@@ -50,8 +47,6 @@ vi.mock('wxt/browser', () => ({
       connect: mocks.connect,
       openOptionsPage: mocks.openOptionsPage,
     },
-    permissions: { contains: mocks.contains, request: mocks.request },
-    tabs: { create: mocks.createTab },
   },
 }));
 
@@ -87,6 +82,16 @@ async function runtimeResponse(request: { type: string }) {
   if (request.type === 'settings:get') {
     return { ok: true, data: { ...publicSettingsFixture, hasApiKey: true } };
   }
+  if (request.type === 'settings:accept-data-use') {
+    return {
+      ok: true,
+      data: {
+        ...publicSettingsFixture,
+        hasApiKey: true,
+        hasDataUseConsent: true,
+      },
+    };
+  }
   if (request.type === 'problem:extract') {
     return {
       ok: true,
@@ -117,12 +122,8 @@ describe('side panel coaching flow', () => {
     mocks.connect.mockClear();
     mocks.openOptionsPage.mockReset();
     mocks.openOptionsPage.mockResolvedValue(undefined);
-    mocks.createTab.mockReset();
-    mocks.createTab.mockResolvedValue(undefined);
     mocks.messageListeners.clear();
     mocks.disconnectListeners.clear();
-    mocks.contains.mockResolvedValue(true);
-    mocks.request.mockResolvedValue(true);
     mocks.sendMessage.mockImplementation(runtimeResponse);
     scrollIntoView.mockReset();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -464,47 +465,53 @@ describe('side panel coaching flow', () => {
     }
   });
 
-  it('offers a lasting grant for one site only while access is temporary', async () => {
-    mocks.contains.mockResolvedValue(false);
+  it('requires an explicit data-use choice before starting a model request', async () => {
+    mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
+      if (request.type === 'settings:get') {
+        return {
+          ok: true,
+          data: {
+            ...publicSettingsFixture,
+            hasApiKey: true,
+            hasDataUseConsent: false,
+          },
+        };
+      }
+      return runtimeResponse(request);
+    });
     render(<App />);
 
-    const grant = await screen.findByRole('button', {
-      name: /read judge\.example without the icon/i,
-    });
-    fireEvent.click(grant);
-
-    expect(mocks.request).toHaveBeenCalledWith({
-      origins: ['https://judge.example/*'],
-    });
-    await waitFor(() => {
-      expect(grant).not.toBeInTheDocument();
-    });
-  });
-
-  it('reports a failed lasting-access request', async () => {
-    mocks.contains.mockResolvedValue(false);
-    mocks.request.mockRejectedValueOnce(new Error('Permission request failed.'));
-    render(<App />);
+    expect(
+      await screen.findByRole('heading', { name: 'Before coaching' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/problem text and URL/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('PRIVACY.md'),
+    );
+    expect(screen.getByRole('button', { name: 'Start coaching' })).toBeDisabled();
+    expect(mocks.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'session:start' }),
+    );
 
     fireEvent.click(
-      await screen.findByRole('button', {
-        name: /read judge\.example without the icon/i,
+      screen.getByRole('button', {
+        name: 'I understand—allow OpenAI requests',
       }),
     );
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Permission request failed.',
-    );
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('heading', { name: 'Before coaching' }),
+      ).not.toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Start coaching' }));
+    expect(mocks.postMessage).toHaveBeenCalledWith({
+      type: 'session:start',
+      problem: problemFixture,
+    });
   });
 
-  it('does not ask again once the site is permanently allowed', async () => {
-    render(<App />);
-
-    expect(await screen.findByText('Batch Sums')).toBeInTheDocument();
-    expect(screen.queryByText(/without the icon/i)).not.toBeInTheDocument();
-  });
-
-  it('routes a denied page to Chrome’s own site-access control', async () => {
+  it('routes denied page access to one-time access or manual paste', async () => {
     mocks.sendMessage.mockImplementation(async (request: { type: string }) => {
       if (request.type === 'problem:extract') {
         return { ok: false, error: PAGE_ACCESS_DENIED_MESSAGE };
@@ -513,11 +520,14 @@ describe('side panel coaching flow', () => {
     });
     render(<App />);
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Open site access settings' }),
-    );
-    expect(mocks.createTab).toHaveBeenCalledWith({
-      url: expect.stringContaining('chrome://extensions/?id='),
-    });
+    expect(
+      await screen.findByText(/reopen the panel from the extension icon/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /site access settings/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Study pasted problem' }),
+    ).toBeInTheDocument();
   });
 });

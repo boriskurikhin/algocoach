@@ -41,7 +41,8 @@ test('loads the packaged settings and side-panel surfaces', async () => {
     await serviceWorker.evaluate(`
       chrome.storage.local.set({
         'socratic-coach:settings': {
-          apiKey: 'sk-e2e-placeholder'
+          apiKey: 'sk-e2e-placeholder',
+          dataUseConsentVersion: 1
         }
       })
     `);

@@ -26,22 +26,22 @@ describe('extension trust boundaries', () => {
     expect(JSON.stringify(extensionHostPermissions)).not.toContain('<all_urls>');
   });
 
-  it('keeps problem-site access optional rather than granted at install', () => {
-    expect(extensionOptionalHostPermissions).toEqual(['https://*/*', 'http://*/*']);
-    for (const pattern of extensionOptionalHostPermissions) {
-      expect(extensionHostPermissions).not.toContain(pattern);
-    }
+  it('does not request persistent access to problem sites', () => {
+    expect(extensionOptionalHostPermissions).toEqual([]);
   });
 
   it('strips API credentials from public settings', () => {
     const publicValue = RuntimeResultSchemas['settings:get'].parse({
       hasApiKey: true,
+      hasDataUseConsent: true,
       apiKey: 'sk-must-not-cross-the-message-boundary',
+      dataUseConsentVersion: 1,
       model: 'gpt-6-astra',
       reasoningEffort: 'high',
       reasoningMode: 'standard',
     });
     expect(publicValue).not.toHaveProperty('apiKey');
+    expect(publicValue).not.toHaveProperty('dataUseConsentVersion');
     expect(publicValue).not.toHaveProperty('model');
     expect(publicValue).not.toHaveProperty('reasoningEffort');
     expect(publicValue).not.toHaveProperty('reasoningMode');
