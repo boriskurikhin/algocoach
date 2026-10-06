@@ -184,6 +184,28 @@ describe('problem adapters', () => {
     expect(isLikelyProblem(context)).toBe(true);
   });
 
+  it.each([
+    ['Input: nums = [1,2] Output: 3', { input: 'nums = [1,2]', output: '3' }],
+    [
+      'Example 1: Input: x = 1\nOutput: 2\nExplanation: Add one. Output: still 2.',
+      { input: 'x = 1', output: '2', explanation: 'Add one. Output: still 2.' },
+    ],
+    ['Input: empty Output: ', { input: 'empty', output: '' }],
+  ])('parses LeetCode sample labels in %s', (sample, expected) => {
+    load('<div data-cy="question-content"><pre></pre></div>');
+    document.querySelector('pre')!.textContent = sample;
+    const context = ProblemContextSchema.parse(
+      extractProblemFromDocument(leetcodeAdapter),
+    );
+    expect(context.samples).toEqual([expected]);
+  });
+
+  it('ignores LeetCode samples with no output label', () => {
+    load('<div data-cy="question-content"><pre></pre></div>');
+    document.querySelector('pre')!.textContent = 'Input: '.repeat(2_800);
+    expect(extractProblemFromDocument(leetcodeAdapter).samples).toEqual([]);
+  });
+
   it('falls back to LeetCode’s hydrated description DOM', () => {
     load(leetcodeDomHtml);
     const context = ProblemContextSchema.parse(

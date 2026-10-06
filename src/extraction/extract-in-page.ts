@@ -413,53 +413,24 @@ export function extractProblemFromDocument(
     const splitLabeledSample = (
       value: string,
     ): { input: string; output: string; explanation?: string } | null => {
-      let sampleInput: string;
-      let sampleOutput: string;
-      let explanation = '';
-
+      // Anchor at the first label so missing outputs cannot trigger repeated scans.
       if (config.site === 'leetcode') {
-        const inputLabel = /\bInput\s*:\s*/i.exec(value);
-        const afterInput = inputLabel
-          ? value.slice((inputLabel.index ?? 0) + inputLabel[0].length)
-          : '';
-        const outputLabel = /\bOutput\s*:\s*/i.exec(afterInput);
-        if (!inputLabel || !outputLabel) return null;
-        const afterOutput = afterInput.slice(
-          (outputLabel.index ?? 0) + outputLabel[0].length,
-        );
-        const explanationLabel = /\bExplanation\s*:\s*/i.exec(afterOutput);
-        sampleInput = normalize(afterInput.slice(0, outputLabel.index ?? 0), 20_000);
-        sampleOutput = normalize(
-          explanationLabel
-            ? afterOutput.slice(0, explanationLabel.index ?? 0)
-            : afterOutput,
-          20_000,
-        );
-        explanation = explanationLabel
-          ? normalize(
-              afterOutput.slice(
-                (explanationLabel.index ?? 0) + explanationLabel[0].length,
-              ),
-              20_000,
-            )
-          : '';
-      } else {
-        // Generic pages need labels at line boundaries so ordinary
-        // preformatted text is never split accidentally.
-        const match = value.match(
-          /(?:^|\n)[ \t]*(?:sample[ \t]+)?input[ \t]*:[ \t]*(?:\n|$)([\s\S]*?)(?:^|\n)[ \t]*(?:sample[ \t]+)?output[ \t]*:[ \t]*(?:\n|$)([\s\S]*)/im,
-        );
-        if (!match) return null;
-        sampleInput = normalize(match[1] ?? '', 20_000);
-        sampleOutput = normalize(match[2] ?? '', 20_000);
+        const start = value.search(/\bInput\s*:/i);
+        if (start < 0) return null;
+        value = value.slice(start);
       }
-
-      return sampleInput || sampleOutput
-        ? {
-            input: sampleInput,
-            output: sampleOutput,
-            ...(explanation ? { explanation } : {}),
-          }
+      // Generic pages need line-boundary labels; LeetCode writes inline labels.
+      const pattern =
+        config.site === 'leetcode'
+          ? /^Input\s*:([\s\S]*?)\bOutput\s*:([\s\S]*?)(?:\bExplanation\s*:([\s\S]*))?$/i
+          : /(?:^|\n)[ \t]*(?:sample[ \t]+)?input[ \t]*:[ \t]*(?:\n|$)([\s\S]*?)(?:^|\n)[ \t]*(?:sample[ \t]+)?output[ \t]*:[ \t]*(?:\n|$)([\s\S]*)/im;
+      const match = value.match(pattern);
+      if (!match) return null;
+      const input = normalize(match[1] ?? '', 20_000);
+      const output = normalize(match[2] ?? '', 20_000);
+      const explanation = normalize(match[3] ?? '', 20_000);
+      return input || output
+        ? { input, output, ...(explanation ? { explanation } : {}) }
         : null;
     };
     const labeledSamples = preformatted

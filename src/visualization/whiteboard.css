@@ -114,12 +114,12 @@
   font-weight: 700;
 }
 
-.visual-cell.state-muted,
 .visual-node.state-muted,
 .visual-edge.state-muted,
 .visual-note.state-muted,
 .visual-index.state-muted,
-.visual-range-label.state-muted {
+.visual-range-label.state-muted,
+.visual-range.state-muted {
   opacity: 0.35;
 }
 
@@ -175,10 +175,6 @@
 .visual-range.state-secondary {
   stroke: var(--visual-secondary);
   stroke-width: 3;
-}
-
-.visual-range.state-muted {
-  opacity: 0.35;
 }
 
 .visual-range-label.state-active,

@@ -7,24 +7,23 @@ import { problemFixture } from '../fixtures/domain';
 
 describe('adaptive model reasoning', () => {
   it.each([
-    ['Easy', 'gpt-6-astra', 'low', 8_000],
-    ['Bronze', 'gpt-6-astra', 'low', 8_000],
-    ['Medium', 'gpt-6-astra', 'medium', 16_000],
-    ['Silver', 'gpt-6-astra', 'medium', 16_000],
-    ['Hard', 'gpt-6-astra', 'high', 32_000],
-    ['Gold', 'gpt-6-astra', 'high', 32_000],
-    ['Platinum', 'gpt-6-astra', 'xhigh', 48_000],
-    ['*1700', 'gpt-6-astra', 'medium', 16_000],
-  ] as const)(
-    'routes site difficulty %s to %s at %s',
-    (rating, model, effort, maxOutputTokens) => {
-      expect(
-        reasoningPlanForProblem({ ...problemFixture, rating }, 'analysis'),
-      ).toEqual({ model, effort, maxOutputTokens });
-    },
-  );
+    'Easy',
+    'Bronze',
+    'Medium',
+    'Silver',
+    'Hard',
+    'Gold',
+    'Platinum',
+    '*1700',
+  ] as const)('keeps startup analysis bounded for site difficulty %s', (rating) => {
+    expect(reasoningPlanForProblem({ ...problemFixture, rating }, 'analysis')).toEqual({
+      model: 'gpt-6-astra',
+      effort: 'low',
+      maxOutputTokens: 6_000,
+    });
+  });
 
-  it('prefers a persisted Codeforces rating over site labels', () => {
+  it('does not let a persisted rating make startup block longer', () => {
     expect(
       reasoningPlanForProblem(
         {
@@ -36,27 +35,33 @@ describe('adaptive model reasoning', () => {
       ),
     ).toEqual({
       model: 'gpt-6-astra',
-      effort: 'xhigh',
-      maxOutputTokens: 48_000,
+      effort: 'low',
+      maxOutputTokens: 6_000,
     });
   });
 
-  it.each([
-    [1_000, 'gpt-6-astra', 'low', 8_000],
-    [1_700, 'gpt-6-astra', 'medium', 16_000],
-    [2_100, 'gpt-6-astra', 'high', 32_000],
-    [2_500, 'gpt-6-astra', 'xhigh', 48_000],
-    [3_000, 'gpt-6-astra', 'max', 64_000],
-  ] as const)(
-    'scales analysis for a %i-rated problem to %s at %s',
-    (rating, model, effort, maxOutputTokens) => {
+  it('keeps direct analysis planning low-latency at every rating', () => {
+    for (const rating of [1_000, 1_700, 2_100, 2_500, 3_000]) {
       expect(reasoningPlanForRating(rating, 'analysis')).toEqual({
-        model,
-        effort,
-        maxOutputTokens,
+        model: 'gpt-6-astra',
+        effort: 'low',
+        maxOutputTokens: 6_000,
       });
-    },
-  );
+    }
+  });
+
+  it('still scales substantive coaching and safety checks', () => {
+    expect(reasoningPlanForRating(2_500, 'coach')).toEqual({
+      model: 'gpt-6-astra',
+      effort: 'xhigh',
+      maxOutputTokens: 32_000,
+    });
+    expect(reasoningPlanForRating(3_000, 'guard')).toEqual({
+      model: 'gpt-6-astra',
+      effort: 'max',
+      maxOutputTokens: 24_000,
+    });
+  });
 
   it('uses a conservative medium plan when the page has no difficulty metadata', () => {
     expect(reasoningPlanForProblem(problemFixture, 'coach')).toEqual({

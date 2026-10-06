@@ -1,12 +1,12 @@
 import type { ProblemContext } from '../extraction/schema';
 import {
   COACH_RESPONSE_MAX_OUTPUT_TOKENS,
-  PROBLEM_ANALYSIS_MAX_OUTPUT_TOKENS,
   RESPONSE_GUARD_MAX_OUTPUT_TOKENS,
 } from './schemas';
 import { COACH_MODEL, type CoachModel, type ModelReasoningEffort } from './models';
 
 type ModelTask = 'analysis' | 'coach' | 'guard';
+type InteractiveModelTask = Exclude<ModelTask, 'analysis'>;
 
 interface ModelReasoningPlan {
   model: CoachModel;
@@ -15,14 +15,17 @@ interface ModelReasoningPlan {
 }
 
 const UNKNOWN_PROBLEM_RATING = 1_600;
+const INITIAL_ANALYSIS_MAX_OUTPUT_TOKENS = 6_000;
 
-const OUTPUT_BUDGETS: Record<ModelReasoningEffort, Record<ModelTask, number>> = {
-  low: { analysis: 8_000, coach: 6_000, guard: 4_000 },
-  medium: { analysis: 16_000, coach: 10_000, guard: 6_000 },
-  high: { analysis: 32_000, coach: 20_000, guard: 10_000 },
-  xhigh: { analysis: 48_000, coach: 32_000, guard: 16_000 },
+const OUTPUT_BUDGETS: Record<
+  ModelReasoningEffort,
+  Record<InteractiveModelTask, number>
+> = {
+  low: { coach: 6_000, guard: 4_000 },
+  medium: { coach: 10_000, guard: 6_000 },
+  high: { coach: 20_000, guard: 10_000 },
+  xhigh: { coach: 32_000, guard: 16_000 },
   max: {
-    analysis: PROBLEM_ANALYSIS_MAX_OUTPUT_TOKENS,
     coach: COACH_RESPONSE_MAX_OUTPUT_TOKENS,
     guard: RESPONSE_GUARD_MAX_OUTPUT_TOKENS,
   },
@@ -58,6 +61,16 @@ export function reasoningPlanForRating(
   rating: number | null,
   task: ModelTask,
 ): ModelReasoningPlan {
+  // Session startup blocks on this compact map. Keep it fast; the substantive
+  // coach and independent guard still scale with the estimated difficulty.
+  if (task === 'analysis') {
+    return {
+      model: COACH_MODEL,
+      effort: 'low',
+      maxOutputTokens: INITIAL_ANALYSIS_MAX_OUTPUT_TOKENS,
+    };
+  }
+
   const effectiveRating = rating ?? UNKNOWN_PROBLEM_RATING;
   const effort = effortForRating(effectiveRating);
   return {

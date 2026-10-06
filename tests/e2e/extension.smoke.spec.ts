@@ -46,7 +46,23 @@ test('loads the packaged settings and side-panel surfaces', async () => {
         }
       })
     `);
+    const modelRequests: Array<Record<string, unknown>> = [];
+    const coachReply = 'Which state changes after you use one batch?';
     await context.route('https://api.openai.com/v1/responses', async (route) => {
+      const body = route.request().postDataJSON();
+      modelRequests.push(body);
+      const schemaName = body.text?.format?.name;
+      const reply =
+        schemaName === 'private_problem_analysis'
+          ? JSON.stringify(problemAnalysisFixture)
+          : schemaName === 'guarded_coach_response'
+            ? JSON.stringify({
+                safeReply: null,
+                solutionStatus: 'in-progress',
+                allowVisualization: false,
+                profileObservations: [],
+              })
+            : coachReply;
       await new Promise((resolve) => setTimeout(resolve, 250));
       const response = {
         id: 'resp_e2e',
@@ -71,7 +87,7 @@ test('loads the packaged settings and side-panel surfaces', async () => {
             content: [
               {
                 type: 'output_text',
-                text: JSON.stringify(problemAnalysisFixture),
+                text: reply,
                 annotations: [],
               },
             ],
@@ -192,6 +208,24 @@ test('loads the packaged settings and side-panel surfaces', async () => {
     ).toBeVisible();
     await expect(brandHeader.getByRole('button', { name: 'Settings' })).toBeVisible();
     await expect(mascot).toBeVisible();
+
+    await sidePanel
+      .getByRole('textbox', { name: 'What would you like to work on?' })
+      .fill('I think each batch leaves some unused units. Help me check this state.');
+    await sidePanel.getByRole('button', { name: 'Ask the coach' }).click();
+    await expect(sidePanel.getByText(coachReply, { exact: true })).toBeVisible();
+    expect(modelRequests).toHaveLength(3);
+    expect(modelRequests.every((request) => request.store === false)).toBe(true);
+    expect(JSON.stringify(modelRequests)).not.toContain('sk-e2e-placeholder');
+    expect(JSON.stringify(modelRequests)).not.toContain('UNCERTAIN_LEARNER_SNAPSHOT');
+    expect(modelRequests[1]?.prompt_cache_options).toEqual({
+      mode: 'explicit',
+      ttl: '30m',
+    });
+    expect(modelRequests[2]?.prompt_cache_options).toEqual({
+      mode: 'explicit',
+      ttl: '30m',
+    });
   } finally {
     await context?.close();
   }

@@ -21,7 +21,7 @@ interface CoachCandidate {
 
 export async function draftCoachResponse(input: {
   session: CoachingSession;
-  learner: LearnerSnapshot;
+  learner?: LearnerSnapshot;
   settings: ExtensionSettings;
   signal?: AbortSignal;
 }): Promise<CoachCandidate> {

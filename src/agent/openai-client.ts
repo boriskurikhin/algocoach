@@ -4,6 +4,7 @@ import {
   LengthFinishReasonError,
 } from 'openai/core/error';
 import { zodTextFormat } from 'openai/helpers/zod';
+import type { ResponseInput } from 'openai/resources/responses/responses';
 import { z } from 'zod';
 import { PAGE_ACCESS_DENIED_MESSAGE } from '../extraction/schema';
 import {
@@ -53,6 +54,7 @@ export async function requestModelResponse<Body extends ResponseBody>(
     promptCacheKey?: string | undefined;
   },
 ) {
+  options.signal?.throwIfAborted();
   const { model } = options;
   const stream = createOpenAIClient(settings).responses.stream(
     {
@@ -66,7 +68,11 @@ export async function requestModelResponse<Body extends ResponseBody>(
       ...(options.promptCacheKey
         ? {
             prompt_cache_key: options.promptCacheKey,
-            prompt_cache_options: { mode: 'implicit' as const, ttl: '30m' as const },
+            prompt_cache_options: {
+              mode:
+                'input' in body && Array.isArray(body.input) ? 'explicit' : 'implicit',
+              ttl: '30m',
+            },
           }
         : {}),
       store: false,
@@ -77,6 +83,7 @@ export async function requestModelResponse<Body extends ResponseBody>(
   // accepted the request, let hard reasoning finish; the caller's signal is
   // the explicit cancellation path.
   const response = await stream.finalResponse();
+  options.signal?.throwIfAborted();
 
   if (response.status === 'failed') {
     throw new CoachRequestError('The coach could not complete this step. Try again.');
@@ -94,7 +101,7 @@ export async function requestModelResponse<Body extends ResponseBody>(
 export async function requestStructuredResponse<Schema extends z.ZodType>(input: {
   settings: ExtensionSettings;
   instructions: string;
-  prompt: string;
+  prompt: string | ResponseInput;
   schema: Schema;
   schemaName: string;
   maxOutputTokens: number;

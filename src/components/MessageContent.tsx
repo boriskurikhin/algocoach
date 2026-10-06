@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-bash';
 import 'prismjs/components/prism-c';
@@ -147,11 +147,9 @@ function renderInlineFormatting(value: string, keyPrefix: string): ReactNode[] {
   });
 }
 
-function Prose({ value, partIndex }: { value: string; partIndex: number }) {
-  return renderInlineFormatting(value, `${partIndex}`);
-}
-
-export function MessageContent({ content }: MessageContentProps) {
+export const MessageContent = memo(function MessageContent({
+  content,
+}: MessageContentProps) {
   return (
     <div className="message-content">
       {parseMessage(content).map((part, index) =>
@@ -162,9 +160,9 @@ export function MessageContent({ content }: MessageContentProps) {
             language={part.language}
           />
         ) : (
-          <Prose key={`text-${index}`} partIndex={index} value={part.value} />
+          renderInlineFormatting(part.value, `${index}`)
         ),
       )}
     </div>
   );
-}
+});

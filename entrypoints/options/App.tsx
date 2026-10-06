@@ -314,9 +314,9 @@ export default function App() {
           Your API key authenticates those requests.
         </p>
         <p>
-          Requests use HTTPS and <code>store: false</code>. OpenAI may keep an implicit
-          prompt-prefix cache for up to 30 minutes and otherwise processes data under
-          its API terms. The full learner profile stays in this browser.
+          Requests use HTTPS and <code>store: false</code>. OpenAI may cache request
+          content for 30 minutes or longer under its API data policies. The full learner
+          profile stays in this browser.
         </p>
         <p>
           <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer">

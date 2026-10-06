@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { zodResponsesFunction } from 'openai/helpers/zod';
 import {
   DrawConceptSchema,
   isFocusedVisualization,
@@ -123,6 +124,49 @@ describe('animated whiteboard', () => {
     expect(container.querySelector('script')).toBeNull();
     expect(container.textContent).toContain('<script>window.bad = true</script>');
   });
+
+  it.each(['graph', 'tree'])(
+    'validates and renders a %s through the model tool',
+    (type) => {
+      const tool = zodResponsesFunction({
+        name: 'draw_concept',
+        parameters: DrawConceptSchema,
+      });
+      const scene = tool.$parseRaw(
+        JSON.stringify({
+          title: 'Two states',
+          question: 'Which state is active?',
+          frames: [
+            {
+              caption: 'One transition.',
+              durationMs: 500,
+              primitives: [
+                {
+                  type,
+                  id: 'states',
+                  label: '',
+                  nodes: [
+                    { id: 'a', label: 'A', x: 10, y: 10, state: 'normal' },
+                    { id: 'b', label: 'B', x: 50, y: 10, state: 'active' },
+                  ],
+                  edges: [
+                    { from: 'a', to: 'b', label: '', directed: true, state: 'normal' },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      );
+      expect(isFocusedVisualization(scene)).toBe(true);
+      const { container } = render(<Whiteboard scene={scene} />);
+      expect(container.querySelectorAll('.visual-node')).toHaveLength(2);
+      expect(container.querySelector('.visual-value.state-active')).toHaveTextContent(
+        'B',
+      );
+      expect(container.querySelector('.visual-edge')).toHaveAttribute('marker-end');
+    },
+  );
 
   it('rejects unknown primitives and unsafe scene sizes', () => {
     expect(

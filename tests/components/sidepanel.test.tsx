@@ -484,7 +484,7 @@ describe('side panel coaching flow', () => {
     expect(
       await screen.findByRole('heading', { name: 'Before coaching' }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/problem text and URL/i)).toBeInTheDocument();
+    expect(screen.getByText(/Coaching sends the problem text,/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute(
       'href',
       expect.stringContaining('PRIVACY.md'),

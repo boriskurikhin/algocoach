@@ -1,7 +1,7 @@
 # Socratic Algo Coach
 
 <p align="center">
-  <img src="public/mascot/greeting.png" alt="The Algo Coach mascot waving" width="220">
+  <img src="public/mascot/greeting.webp" alt="The Algo Coach mascot waving" width="220">
 </p>
 
 A Chrome side-panel coach for competitive programming. It reads the problem
@@ -45,12 +45,7 @@ Reading the page is local. The first paid request happens when you click
 Contributions are welcome. Before changing coaching behavior, read
 [`MANIFESTO.md`](MANIFESTO.md) and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-Start the development build with:
-
-```sh
-npm install
-npm run dev
-```
+Use `npm run dev` for development.
 
 Before opening a pull request, run:
 
@@ -70,10 +65,8 @@ npx playwright install chromium # once
 npm run test:e2e
 ```
 
-Good places to contribute include site adapters, extraction fixtures,
-accessibility, visual explanations, tests, and documentation. Prompt or learner
-profile changes need focused policy tests; site-adapter changes need a sanitized
-fixture and a negative case.
+Prompt and learner-profile changes need policy tests; extraction changes need
+sanitized fixtures and negative cases.
 
 ## Project map
 
@@ -86,16 +79,6 @@ fixture and a negative case.
 - `src/visualization/` — validated diagrams and SVG rendering
 - `tests/` — unit, policy, security, component, and packaged browser tests
 
-The short version:
-
-```text
-problem page → extractor → side panel → background worker → OpenAI
-                                                        ↓
-                                                  response guard
-                                                        ↓
-                                                    coach reply
-```
-
 ## Privacy
 
 There is no application backend and no analytics.
@@ -104,11 +87,16 @@ The API key and learner profile are stored in trusted extension-local storage.
 Browser storage is not a hardware secret store: someone with access to the
 browser profile may be able to recover the key.
 
-When coaching starts, the relevant problem text and, if enabled, a small learner
-snapshot are sent to OpenAI. During a conversation, recent messages and private
-coaching context are sent as well. Sessions use temporary browser storage;
+Startup sends the problem text for private analysis. Coaching turns include
+recent conversation, the private map, and an optional relevant learner snapshot.
+The independent guard receives conversation evidence and the answer boundary;
+it approves safe replies without generating another copy. Sessions use temporary browser storage;
 learner memory stays local until you erase it. The user pays OpenAI directly.
 Starting a problem uses one model call, and each normal turn uses two.
+
+Reusable problem context has explicit prompt-cache boundaries. Conversation
+history retains whole messages within a budget and identifies omissions;
+no extra model call summarizes it. Model reasoning still scales with difficulty.
 
 Page access is temporary and starts with a user gesture; the extension requests
 no persistent access to problem sites. Page code never receives the API key,

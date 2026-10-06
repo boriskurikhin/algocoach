@@ -20,16 +20,14 @@ function katexWoff2Only(): Plugin {
   };
 }
 
-export const extensionPermissions = [
+const extensionPermissions = [
   'activeTab',
   'scripting',
   'sidePanel',
   'storage',
 ] as const;
 
-export const extensionHostPermissions = ['https://api.openai.com/*'] as const;
-
-export const extensionOptionalHostPermissions = [] as const;
+const extensionHostPermissions = ['https://api.openai.com/*'] as const;
 
 const extensionIcons = {
   16: 'mascot/icon-16.png',

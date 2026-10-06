@@ -14,13 +14,13 @@ export interface CoachMascotContext {
 }
 
 export const COACH_MASCOT_ASSET: Record<CoachMascotState, string> = {
-  idle: '/mascot/idle.png',
-  greeting: '/mascot/greeting.png',
-  typing: '/mascot/user-typing.png',
-  reading: '/mascot/reading.png',
-  thinking: '/mascot/thinking.png',
-  support: '/mascot/support.png',
-  complete: '/mascot/complete.png',
+  idle: '/mascot/idle.webp',
+  greeting: '/mascot/greeting.webp',
+  typing: '/mascot/user-typing.webp',
+  reading: '/mascot/reading.webp',
+  thinking: '/mascot/thinking.webp',
+  support: '/mascot/support.webp',
+  complete: '/mascot/complete.webp',
 };
 
 export const COACH_MASCOT_LABEL: Record<CoachMascotState, string> = {

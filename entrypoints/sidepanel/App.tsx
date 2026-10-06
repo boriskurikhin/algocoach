@@ -500,13 +500,13 @@ export default function App() {
         <section className="notice" aria-labelledby="data-use-title">
           <h2 id="data-use-title">Before coaching</h2>
           <p>
-            Coaching sends the problem text and URL, your messages and pasted code, a
-            private problem analysis, and—if enabled—a small learner snapshot directly
-            to OpenAI using your key.
+            Coaching sends the problem text, your messages and pasted code, a private
+            problem analysis, and—if enabled—a small learner snapshot directly to OpenAI
+            using your key.
           </p>
           <p>
-            Requests use <code>store: false</code> and may use OpenAI's prompt-prefix
-            cache for up to 30 minutes.{' '}
+            Requests use <code>store: false</code>. OpenAI may cache request content for
+            30 minutes or longer under its API data policies.{' '}
             <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer">
               Privacy policy
             </a>
@@ -642,7 +642,7 @@ export default function App() {
             </div>
           </section>
 
-          <section className="conversation" aria-label="Coaching conversation">
+          <section aria-label="Coaching conversation">
             {messages.map((message) => (
               <article
                 className={`message message-${message.role}`}
@@ -717,11 +717,7 @@ export default function App() {
             <span className="status-copy">
               <span className="status-heading">
                 <strong>{status.label}</strong>
-                <button
-                  className="link-button status-stop"
-                  type="button"
-                  onClick={cancelRequest}
-                >
+                <button className="link-button" type="button" onClick={cancelRequest}>
                   Stop
                 </button>
               </span>

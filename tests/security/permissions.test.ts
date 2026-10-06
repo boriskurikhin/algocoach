@@ -3,11 +3,7 @@ import {
   CoachServerEventSchema,
   RuntimeResultSchemas,
 } from '../../src/messaging/schema';
-import {
-  extensionHostPermissions,
-  extensionOptionalHostPermissions,
-  extensionPermissions,
-} from '../../wxt.config';
+import extensionConfig from '../../wxt.config';
 import {
   restorableSessionFixture,
   sessionFixture,
@@ -16,18 +12,19 @@ import {
 
 describe('extension trust boundaries', () => {
   it('requests temporary page access and only the OpenAI network origin', () => {
-    expect(extensionPermissions).toEqual([
+    expect(extensionConfig.manifest).toHaveProperty('permissions', [
       'activeTab',
       'scripting',
       'sidePanel',
       'storage',
     ]);
-    expect(extensionHostPermissions).toEqual(['https://api.openai.com/*']);
-    expect(JSON.stringify(extensionHostPermissions)).not.toContain('<all_urls>');
+    expect(extensionConfig.manifest).toHaveProperty('host_permissions', [
+      'https://api.openai.com/*',
+    ]);
   });
 
   it('does not request persistent access to problem sites', () => {
-    expect(extensionOptionalHostPermissions).toEqual([]);
+    expect(extensionConfig.manifest).not.toHaveProperty('optional_host_permissions');
   });
 
   it('strips API credentials from public settings', () => {

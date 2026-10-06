@@ -35,17 +35,12 @@ export async function startCoachingSession(
 ): Promise<CoachingSession> {
   const startedAt = Date.now();
   input.onStatus?.('studying', COACH_STATUS_LABELS.studying);
-  const profile = await getLearnerProfile();
-  const learnerSnapshot = buildLearnerSnapshot(profile, [
-    input.problem.title,
-    ...input.problem.tags,
-  ]);
   const analysis = await analyzeProblem({
     problem: input.problem,
-    learner: learnerSnapshot,
     settings: input.settings,
     signal: input.signal,
   });
+  input.signal?.throwIfAborted();
   const coachingMap = analysis.coachingMap;
   const officialRating =
     input.problem.codeforcesRating?.source === 'official'
@@ -109,14 +104,14 @@ export async function respondToLearner(
     messages: [...existing.messages, userMessage].slice(-MAX_SESSION_MESSAGES),
     updatedAt: Date.now(),
   });
-  await saveSession(withUser);
-
-  const profile = await getLearnerProfile();
-  const learnerSnapshot = buildLearnerSnapshot(profile, [
-    withUser.problem.title,
-    ...withUser.problem.tags,
-    ...withUser.coachingMap.relevantConcepts,
-  ]);
+  const [, profile] = await Promise.all([saveSession(withUser), getLearnerProfile()]);
+  const learnerSnapshot = profile.personalizationEnabled
+    ? buildLearnerSnapshot(profile, [
+        withUser.problem.title,
+        ...withUser.problem.tags,
+        ...withUser.coachingMap.relevantConcepts,
+      ])
+    : undefined;
 
   input.onStatus?.('coaching', COACH_STATUS_LABELS.coaching);
   const candidate = await draftCoachResponse({
@@ -125,6 +120,7 @@ export async function respondToLearner(
     settings: input.settings,
     signal: input.signal,
   });
+  input.signal?.throwIfAborted();
 
   input.onStatus?.('checking', COACH_STATUS_LABELS.checking);
   const guarded = await guardCoachResponse({
@@ -133,8 +129,7 @@ export async function respondToLearner(
     candidateReply: candidate.reply,
     ...(candidate.visualization ? { visualization: candidate.visualization } : {}),
     coachingMap: withUser.coachingMap,
-    learner: learnerSnapshot,
-    problemKey: withUser.problemKey,
+    personalizationEnabled: profile.personalizationEnabled,
     ...(withUser.problem.codeforcesRating
       ? { codeforcesRating: withUser.problem.codeforcesRating.value }
       : {}),
@@ -142,23 +137,34 @@ export async function respondToLearner(
     settings: input.settings,
     signal: input.signal,
   });
+  input.signal?.throwIfAborted();
 
   if (profile.personalizationEnabled && guarded.profileObservations.length > 0) {
     try {
-      await saveLearnerProfile(
-        applyProfileObservations(
-          profile,
-          guarded.profileObservations.map((observation) => ({
-            ...observation,
-            problemKey: observation.problemKey || withUser.problemKey,
-          })),
-        ),
-      );
+      const currentProfile = await getLearnerProfile();
+      input.signal?.throwIfAborted();
+      // Settings changes made while the models were running take precedence.
+      if (
+        currentProfile.personalizationEnabled &&
+        currentProfile.createdAt === profile.createdAt &&
+        currentProfile.updatedAt === profile.updatedAt
+      ) {
+        await saveLearnerProfile(
+          applyProfileObservations(
+            currentProfile,
+            guarded.profileObservations.map((observation) => ({
+              ...observation,
+              problemKey: withUser.problemKey.slice(0, 500),
+            })),
+          ),
+        );
+      }
     } catch {
       // Personalization is optional: a quota or storage failure must not hide
       // an otherwise valid coaching response.
     }
   }
+  input.signal?.throwIfAborted();
 
   const assistantMessage = ChatMessageSchema.parse({
     id: newId(),

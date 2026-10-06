@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective September 5, 2026
+Effective September 8, 2026
 
 Socratic Algo Coach is an open-source Chrome extension for competitive
 programming practice. It has no application backend, advertising, or analytics.
@@ -14,7 +14,8 @@ The extension handles only data needed to provide coaching:
   authentication for requests you initiate.
 - **Problem content.** After you invoke the extension, it may read the active
   page's URL, title, problem statement, limits, difficulty, and tags. You may
-  also paste a problem statement manually.
+  also paste a problem statement manually. Coaching requests omit page URL and
+  host metadata.
 - **Conversation content.** Messages and code you paste into the conversation
   are sent to OpenAI when you ask the coach to respond.
 - **Learner profile.** If you enable personalization, the extension stores
@@ -35,9 +36,8 @@ third party. Data is not sold, used for advertising, or used for credit or
 lending decisions. The developer does not read user problem statements,
 conversations, API keys, or learner profiles.
 
-Requests to OpenAI use HTTPS and set `store: false`. They may use OpenAI's
-implicit prompt-prefix cache for up to 30 minutes. OpenAI processes data under
-its own API terms and privacy policies.
+Requests to OpenAI use HTTPS and set `store: false`. OpenAI may cache request
+content for 30 minutes or longer under its API data policies.
 
 ## Local storage and retention
 

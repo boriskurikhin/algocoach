@@ -8,7 +8,7 @@ import { serializedByteLength } from './size';
 const SETTINGS_KEY = 'socratic-coach:settings';
 const PROFILE_KEY = 'socratic-coach:learner-profile';
 export const MAX_AUTO_PROFILE_ENTRIES = 500;
-export const MAX_PROFILE_STORAGE_BYTES = 2 * 1024 * 1024;
+const MAX_PROFILE_STORAGE_BYTES = 2 * 1024 * 1024;
 const PROFILE_COLLECTIONS = [
   'languages',
   'concepts',
@@ -111,12 +111,10 @@ export function compactLearnerProfile(
   input: LearnerProfile,
   limits: { maxAutoEntries?: number; maxBytes?: number } = {},
 ): LearnerProfile {
-  const parsed = LearnerProfileSchema.parse(input);
+  const profile = LearnerProfileSchema.parse(input);
   const maxAutoEntries = limits.maxAutoEntries ?? MAX_AUTO_PROFILE_ENTRIES;
   const maxBytes = limits.maxBytes ?? MAX_PROFILE_STORAGE_BYTES;
-  if (!exceedsProfileLimits(parsed, maxAutoEntries, maxBytes)) return parsed;
-
-  const profile = structuredClone(parsed);
+  if (!exceedsProfileLimits(profile, maxAutoEntries, maxBytes)) return profile;
   const automaticEntries = profileEntries(profile)
     .filter(({ estimate }) => !estimate.pinned)
     .sort(oldestFirst);

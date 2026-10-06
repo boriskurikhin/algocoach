@@ -13,7 +13,7 @@ export const publicSettingsFixture: PublicSettings = {
   hasDataUseConsent: true,
 };
 
-export interface ResponseMocks {
+interface ResponseMocks {
   parse: Mock;
 }
 
@@ -28,22 +28,9 @@ export async function stubOpenAI(
   const actual = await importOriginal();
   class StubbedOpenAI extends actual.default {
     override responses = {
-      stream: (body: unknown, options: unknown) => {
-        let rejectAbort: ((error: Error) => void) | undefined;
-        const aborted = new Promise<never>((_resolve, reject) => {
-          rejectAbort = reject;
-        });
-        const responseStream = {
-          on: () => responseStream,
-          finalResponse: () =>
-            Promise.race([
-              Promise.resolve().then(() => mocks.parse(body, options)),
-              aborted,
-            ]),
-          abort: () => rejectAbort?.(new actual.default.APIUserAbortError()),
-        };
-        return responseStream;
-      },
+      stream: (body: unknown, options: unknown) => ({
+        finalResponse: () => Promise.resolve().then(() => mocks.parse(body, options)),
+      }),
     } as never;
   }
   return { ...actual, default: StubbedOpenAI };

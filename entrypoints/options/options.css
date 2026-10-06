@@ -75,10 +75,6 @@
   margin-top: var(--space-6);
 }
 
-.profile-section h3 {
-  font-size: var(--text-base);
-}
-
 .estimate-list {
   padding: 0;
   list-style: none;

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { memo, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import type { DrawConcept, VisualPrimitive } from './schema';
 import './whiteboard.css';
 
@@ -272,14 +272,14 @@ function Primitive({
   if (primitive.type === 'matrix') {
     return <MatrixVisual primitive={primitive} top={top} />;
   }
-  if (primitive.type === 'graph' || primitive.type === 'tree') {
-    return <GraphVisual primitive={primitive} top={top} arrowId={arrowId} />;
+  if (primitive.type === 'text') {
+    return (
+      <text className={`visual-note state-${primitive.state}`} x="24" y={top + 40}>
+        {primitive.text}
+      </text>
+    );
   }
-  return (
-    <text className={`visual-note state-${primitive.state}`} x="24" y={top + 40}>
-      {primitive.text}
-    </text>
-  );
+  return <GraphVisual primitive={primitive} top={top} arrowId={arrowId} />;
 }
 
 function primitiveHeight(primitive: VisualPrimitive): number {
@@ -302,7 +302,7 @@ function primitiveHeight(primitive: VisualPrimitive): number {
   return 70;
 }
 
-export function Whiteboard({ scene }: WhiteboardProps) {
+export const Whiteboard = memo(function Whiteboard({ scene }: WhiteboardProps) {
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const visualId = useId().replaceAll(':', '');
@@ -328,16 +328,12 @@ export function Whiteboard({ scene }: WhiteboardProps) {
   }, [frame, frameIndex, playing, reducedMotion, scene.frames.length]);
 
   if (!frame) return null;
-  const layers = frame.primitives.map((primitive, index) => ({
-    primitive,
-    top: frame.primitives
-      .slice(0, index)
-      .reduce((sum, previous) => sum + primitiveHeight(previous), 0),
-  }));
-  const height = Math.max(
-    190,
-    frame.primitives.reduce((sum, primitive) => sum + primitiveHeight(primitive), 0),
-  );
+  const layers = [];
+  let height = 0;
+  for (const primitive of frame.primitives) {
+    layers.push({ primitive, top: height });
+    height += primitiveHeight(primitive);
+  }
   const titleId = `${visualId}-title`;
   const captionId = `${visualId}-caption`;
   const arrowId = `${visualId}-arrow`;
@@ -353,7 +349,7 @@ export function Whiteboard({ scene }: WhiteboardProps) {
       <svg
         key={frameIndex}
         className="whiteboard-canvas"
-        viewBox={`0 0 640 ${height}`}
+        viewBox={`0 0 640 ${Math.max(190, height)}`}
         role="img"
         aria-labelledby={`${titleId} ${captionId}`}
       >
@@ -425,4 +421,4 @@ export function Whiteboard({ scene }: WhiteboardProps) {
       <p className="whiteboard-question">{scene.question}</p>
     </figure>
   );
-}
+});

@@ -168,7 +168,7 @@ export function applyKnowledgeCorrection(
   },
   now = Date.now(),
 ): LearnerProfile {
-  const profile = structuredClone(LearnerProfileSchema.parse(profileInput));
+  const profile = LearnerProfileSchema.parse(profileInput);
   const key = correction.key.trim().toLowerCase();
   const previous = profile[correction.dimension][key];
   const observation: ProfileObservation = {
@@ -204,7 +204,7 @@ export function applyProfileObservations(
   observationsInput: ProfileObservation[],
   now = Date.now(),
 ): LearnerProfile {
-  const profile = structuredClone(LearnerProfileSchema.parse(profileInput));
+  const profile = LearnerProfileSchema.parse(profileInput);
   if (!profile.personalizationEnabled) return profile;
 
   observationsInput.forEach((rawObservation, index) => {
@@ -258,7 +258,7 @@ export function buildLearnerSnapshot(
     });
   }
 
-  const terms = relevantTerms.map((term) => term.toLowerCase());
+  const terms = relevantTerms.map((term) => term.trim().toLowerCase()).filter(Boolean);
   const relevance = (key: string): number =>
     terms.some((term) => term.includes(key) || key.includes(term)) ? 1 : 0;
 
@@ -267,9 +267,10 @@ export function buildLearnerSnapshot(
     collection: Record<string, T>,
     limit: number,
     keep: (estimate: T) => boolean,
+    relevantOnly = false,
   ): string[] =>
     Object.entries(collection)
-      .filter(([, estimate]) => keep(estimate))
+      .filter(([key, estimate]) => keep(estimate) && (!relevantOnly || relevance(key)))
       .sort(
         ([leftKey, left], [rightKey, right]) =>
           relevance(rightKey) - relevance(leftKey) ||
@@ -280,7 +281,7 @@ export function buildLearnerSnapshot(
 
   const recurringBlockers = rank(
     profile.blockers,
-    12,
+    4,
     (estimate) =>
       estimate.score >= 0.28 &&
       estimate.sampleCount >= 2 &&
@@ -293,26 +294,28 @@ export function buildLearnerSnapshot(
   return LearnerSnapshotSchema.parse({
     preferredLanguages: rank(
       profile.languages,
-      5,
+      3,
       (estimate) =>
         estimate.level !== 'unknown' && effectiveConfidence(estimate, now) >= 0.25,
     ),
     reliableConcepts: rank(
       profile.concepts,
-      20,
+      8,
       (estimate) =>
         estimate.level === 'reliable' && effectiveConfidence(estimate, now) >= 0.25,
+      true,
     ),
     practicingConcepts: rank(
       profile.concepts,
-      20,
+      8,
       (estimate) =>
         ['encountered', 'practicing'].includes(estimate.level) &&
         effectiveConfidence(estimate, now) >= 0.25,
+      true,
     ),
     strengths: rank(
       profile.competencies,
-      12,
+      4,
       (estimate) =>
         ['practicing', 'reliable'].includes(estimate.level) &&
         effectiveConfidence(estimate, now) >= 0.4,
@@ -320,7 +323,7 @@ export function buildLearnerSnapshot(
     recurringBlockers,
     helpfulCoachingStyles: rank(
       profile.coachingPreferences,
-      8,
+      3,
       (estimate) => estimate.score >= 0.2 && effectiveConfidence(estimate, now) >= 0.3,
     ),
     coachingPressure: firmSignals ? 'firm' : 'standard',

@@ -126,6 +126,8 @@ describe('local credential and profile storage', () => {
     expect(serializedByteLength(compacted)).toBeLessThanOrEqual(maxBytes);
     expect(compacted.concepts.pinned).toBeDefined();
     expect(compacted.concepts.old).toBeUndefined();
+    expect(profile.concepts.old?.evidence).toHaveLength(12);
+    expect(profile.concepts.pinned?.evidence).toHaveLength(12);
   });
 
   it('fails closed without a key and never exposes arbitrary error text', () => {

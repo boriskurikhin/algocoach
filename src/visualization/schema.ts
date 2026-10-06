@@ -99,6 +99,7 @@ const MatrixPrimitiveSchema = z
   .describe('A small rectangular grid; keep dimensions fixed across frames');
 
 const NetworkPrimitiveSchema = z.object({
+  type: z.enum(['graph', 'tree']),
   id: z.string().min(1).max(80),
   label: z.string().max(120),
   nodes: z
@@ -126,14 +127,6 @@ const NetworkPrimitiveSchema = z.object({
     .max(80),
 });
 
-const GraphPrimitiveSchema = NetworkPrimitiveSchema.extend({
-  type: z.literal('graph'),
-});
-
-const TreePrimitiveSchema = NetworkPrimitiveSchema.extend({
-  type: z.literal('tree'),
-});
-
 const TextPrimitiveSchema = z.object({
   type: z.literal('text'),
   id: z.string().min(1).max(80),
@@ -144,8 +137,7 @@ const TextPrimitiveSchema = z.object({
 const VisualPrimitiveSchema = z.discriminatedUnion('type', [
   ArrayPrimitiveSchema,
   MatrixPrimitiveSchema,
-  GraphPrimitiveSchema,
-  TreePrimitiveSchema,
+  NetworkPrimitiveSchema,
   TextPrimitiveSchema,
 ]);
 
@@ -266,16 +258,14 @@ const isSmallPrimitive = (primitive: VisualPrimitive): boolean => {
   if (primitive.type === 'matrix') {
     return primitiveMarks(primitive) <= 64 && validMatrixIndices(primitive);
   }
-  if (primitive.type === 'graph' || primitive.type === 'tree') {
-    const ids = new Set(primitive.nodes.map(({ id }) => id));
-    return (
-      ids.size === primitive.nodes.length &&
-      primitive.nodes.length <= 18 &&
-      primitive.edges.length <= 32 &&
-      primitive.edges.every(({ from, to }) => ids.has(from) && ids.has(to))
-    );
-  }
-  return primitive.text.length <= 140;
+  if (primitive.type === 'text') return primitive.text.length <= 140;
+  const ids = new Set(primitive.nodes.map(({ id }) => id));
+  return (
+    ids.size === primitive.nodes.length &&
+    primitive.nodes.length <= 18 &&
+    primitive.edges.length <= 32 &&
+    primitive.edges.every(({ from, to }) => ids.has(from) && ids.has(to))
+  );
 };
 
 export function isFocusedVisualization(scene: DrawConcept): boolean {

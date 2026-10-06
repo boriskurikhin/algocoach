@@ -49,6 +49,8 @@ describe('learner profile updates', () => {
     const twice = applyProfileObservations(once, [observation()], 300);
     expect(twice.concepts.fft?.level).toBe('reliable');
     expect(twice.concepts.fft?.demonstratedCount).toBe(2);
+    expect(start.concepts).toEqual({});
+    expect(once.concepts.fft?.demonstratedCount).toBe(1);
   });
 
   it('keeps self-reported knowledge distinct from demonstrated mastery', () => {
@@ -194,6 +196,19 @@ describe('learner profile updates', () => {
     expect(serialized).toContain('fft');
     expect(serialized).not.toContain('PRIVATE LOCAL EVIDENCE');
     expect(serialized).not.toContain('problem-1');
+  });
+
+  it('omits unrelated concepts and empty relevance terms', () => {
+    const profile = applyProfileObservations(
+      enabledProfile(100),
+      [observation(), observation({ key: 'graphs' })],
+      200,
+    );
+    expect(buildLearnerSnapshot(profile, ['fft', ' '], 200).practicingConcepts).toEqual(
+      ['fft'],
+    );
+    expect(buildLearnerSnapshot(profile, [], 200).practicingConcepts).toEqual([]);
+    expect(Object.keys(profile.concepts)).toEqual(['fft', 'graphs']);
   });
 
   it('honors disabled personalization and stale confidence', () => {

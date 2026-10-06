@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import Prism from 'prismjs';
 import { MessageContent } from '../../src/components/MessageContent';
 
 describe('message code snippets', () => {
@@ -17,6 +18,27 @@ describe('message code snippets', () => {
       'leftovers[item] -= used',
     );
     expect(container.textContent).toContain('What changed?');
+  });
+
+  it('keeps unchanged snippets cached across parent updates', () => {
+    const tokenize = vi.spyOn(Prism, 'tokenize');
+    const content = '```python\nremaining -= used\n```';
+    try {
+      const { rerender } = render(<MessageContent content={content} />);
+      const initialCalls = tokenize.mock.calls.length;
+      expect(initialCalls).toBeGreaterThan(0);
+
+      rerender(<MessageContent content={content} />);
+      expect(tokenize).toHaveBeenCalledTimes(initialCalls);
+
+      rerender(<MessageContent content={'```python\nremaining += used\n```'} />);
+      expect(tokenize.mock.calls.length).toBeGreaterThan(initialCalls);
+      expect(screen.getByText('remaining', { exact: false })).toHaveTextContent(
+        'remaining += used',
+      );
+    } finally {
+      tokenize.mockRestore();
+    }
   });
 
   it('renders single-backtick spans as inline code', () => {

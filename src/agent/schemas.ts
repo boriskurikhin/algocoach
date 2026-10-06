@@ -7,7 +7,6 @@ import { ProfileObservationSchema } from '../learner/schema';
 import { DrawConceptSchema } from '../visualization/schema';
 
 export const OPENAI_CONNECTION_TIMEOUT_MS = 10 * 60_000;
-export const PROBLEM_ANALYSIS_MAX_OUTPUT_TOKENS = 64_000;
 export const COACH_RESPONSE_MAX_OUTPUT_TOKENS = 48_000;
 export const RESPONSE_GUARD_MAX_OUTPUT_TOKENS = 24_000;
 export const COACH_PROCESSING_TIER = 'default' as const;
@@ -97,10 +96,13 @@ export const CoachingSessionSchema = z.preprocess((value) => {
 }, CoachingSessionDataSchema);
 
 export const GuardResultSchema = z.object({
-  safeReply: z.string().min(1).max(5_000),
+  // Null approves the candidate without generating a second copy of it.
+  safeReply: z.string().min(1).max(5_000).nullable(),
   solutionStatus: z.enum(['in-progress', 'optimal']),
   allowVisualization: z.boolean(),
-  profileObservations: z.array(ProfileObservationSchema).max(8),
+  profileObservations: z
+    .array(ProfileObservationSchema.omit({ problemKey: true }))
+    .max(8),
 });
 
 export type CoachingMap = z.infer<typeof CoachingMapSchema>;

@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  learnerSnapshotFixture,
-  problemAnalysisFixture,
-  problemFixture,
-} from '../fixtures/domain';
+import { problemAnalysisFixture, problemFixture } from '../fixtures/domain';
 import {
   resetResponseMocks,
   settingsFixture as settings,
@@ -29,7 +25,6 @@ describe('private problem analysis', () => {
     await expect(
       analyzeProblem({
         problem: problemFixture,
-        learner: learnerSnapshotFixture,
         settings,
       }),
     ).resolves.toEqual(problemAnalysisFixture);
@@ -39,11 +34,11 @@ describe('private problem analysis', () => {
     expect(request.store).toBe(false);
     expect(request.service_tier).toBe('default');
     expect(request.prompt_cache_key).toBe('socratic-coach:analysis');
-    expect(request.reasoning).toEqual({ effort: 'medium', mode: 'standard' });
+    expect(request.reasoning).toEqual({ effort: 'low', mode: 'standard' });
     expect(request.text.verbosity).toBe('low');
-    expect(request.max_output_tokens).toBe(16_000);
+    expect(request.max_output_tokens).toBe(6_000);
     expect(request.input).toContain('UNTRUSTED_PROBLEM_DATA_START');
-    expect(request.input).toContain('UNCERTAIN_LEARNER_SNAPSHOT_START');
+    expect(request.input).not.toContain('LEARNER_SNAPSHOT');
     expect(request.instructions).toContain('private');
     expect(request.instructions).toContain('Codeforces-equivalent difficulty');
     expect(JSON.stringify(request)).not.toContain('test-only-key');
@@ -54,7 +49,6 @@ describe('private problem analysis', () => {
     await expect(
       analyzeProblem({
         problem: problemFixture,
-        learner: learnerSnapshotFixture,
         settings,
       }),
     ).rejects.toThrow('incomplete problem analysis');
@@ -64,12 +58,24 @@ describe('private problem analysis', () => {
     const controller = new AbortController();
     await analyzeProblem({
       problem: problemFixture,
-      learner: learnerSnapshotFixture,
       settings,
       signal: controller.signal,
     });
 
     expect(mocks.parse.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+  });
+
+  it('does not send an already canceled request', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      analyzeProblem({
+        problem: problemFixture,
+        settings,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow();
+    expect(mocks.parse).not.toHaveBeenCalled();
   });
 
   it('explains when reasoning consumes the output budget', async () => {
@@ -81,7 +87,6 @@ describe('private problem analysis', () => {
     await expect(
       analyzeProblem({
         problem: problemFixture,
-        learner: learnerSnapshotFixture,
         settings,
       }),
     ).rejects.toThrow('could not finish this step');
@@ -101,7 +106,6 @@ describe('private problem analysis', () => {
       );
       const result = analyzeProblem({
         problem: problemFixture,
-        learner: learnerSnapshotFixture,
         settings,
       });
 

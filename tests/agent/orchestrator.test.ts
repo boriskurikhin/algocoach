@@ -64,6 +64,7 @@ describe('coaching orchestration', () => {
     }).finally(() => now.mockRestore());
 
     expect(mocks.analyze).toHaveBeenCalledOnce();
+    expect(mocks.getProfile).not.toHaveBeenCalled();
     expect(session.coachingMap).toEqual(coachingMapFixture);
     expect(session.problem.codeforcesRating).toEqual({
       value: 1_300,
@@ -78,7 +79,6 @@ describe('coaching orchestration', () => {
     expect(session.updatedAt).toBe(500);
     expect(mocks.analyze).toHaveBeenCalledWith({
       problem: problemFixture,
-      learner: expect.objectContaining({ caveat: expect.stringMatching(/uncertain/i) }),
       settings,
       signal: undefined,
     });
@@ -151,6 +151,7 @@ describe('coaching orchestration', () => {
         candidateReply: 'Candidate text',
         latestLearnerMessage: 'I think the total should stay fixed.',
         codeforcesRating: 1_300,
+        personalizationEnabled: true,
         conversation: expect.arrayContaining([
           expect.objectContaining({
             role: 'user',
@@ -293,4 +294,87 @@ describe('coaching orchestration', () => {
     expect(mocks.draft).not.toHaveBeenCalled();
     expect(mocks.guard).not.toHaveBeenCalled();
   });
+
+  it('does not start the guard or save memory after cancellation', async () => {
+    const controller = new AbortController();
+    mocks.getSession.mockResolvedValue(sessionFixture);
+    mocks.draft.mockImplementationOnce(async () => {
+      controller.abort();
+      return { reply: 'A discarded draft.' };
+    });
+    await expect(
+      respondToLearner({
+        sessionId: sessionFixture.id,
+        content: 'Let me think.',
+        settings,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow();
+    expect(mocks.guard).not.toHaveBeenCalled();
+    expect(mocks.saveProfile).not.toHaveBeenCalled();
+    expect(mocks.saveSession).toHaveBeenCalledOnce();
+  });
+
+  it('disables observation collection when personalization is off', async () => {
+    mocks.getSession.mockResolvedValue(sessionFixture);
+    mocks.getProfile.mockResolvedValue(createEmptyLearnerProfile());
+    mocks.draft.mockResolvedValue({ reply: 'Which value changes?' });
+    mocks.guard.mockResolvedValue({
+      safeReply: 'Which value changes?',
+      solutionStatus: 'in-progress',
+      allowVisualization: false,
+      profileObservations: [],
+    });
+    await respondToLearner({
+      sessionId: sessionFixture.id,
+      content: 'I cannot follow this update.',
+      settings,
+    });
+    const guardInput = mocks.guard.mock.calls[0]?.[0];
+    expect(guardInput.personalizationEnabled).toBe(false);
+    expect(guardInput).not.toHaveProperty('learner');
+    expect(guardInput).not.toHaveProperty('problemKey');
+    expect(mocks.saveProfile).not.toHaveBeenCalled();
+  });
+
+  it.each(['disabled', 'reset', 'corrected'])(
+    'preserves memory %s in Settings while a model request was running',
+    async (change) => {
+      mocks.getSession.mockResolvedValue(sessionFixture);
+      mocks.getProfile
+        .mockResolvedValueOnce({
+          ...createEmptyLearnerProfile(1),
+          personalizationEnabled: true,
+        })
+        .mockResolvedValueOnce({
+          ...createEmptyLearnerProfile(change === 'reset' ? 2 : 1),
+          personalizationEnabled: change !== 'disabled',
+          updatedAt: 2,
+        });
+      mocks.draft.mockResolvedValue({ reply: 'Which value changes?' });
+      mocks.guard.mockResolvedValue({
+        safeReply: 'Which value changes?',
+        solutionStatus: 'in-progress',
+        allowVisualization: false,
+        profileObservations: [
+          {
+            dimension: 'concept',
+            key: 'invariants',
+            evidenceType: 'observed',
+            note: 'Compared two states.',
+            supports: true,
+            confidence: 0.5,
+            knowledgeLevel: 'practicing',
+          },
+        ],
+      });
+      const { message } = await respondToLearner({
+        sessionId: sessionFixture.id,
+        content: 'The total stays fixed.',
+        settings,
+      });
+      expect(message.content).toBe('Which value changes?');
+      expect(mocks.saveProfile).not.toHaveBeenCalled();
+    },
+  );
 });

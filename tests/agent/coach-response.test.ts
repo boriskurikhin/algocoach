@@ -48,7 +48,7 @@ describe('coach response drafting', () => {
         model: 'gpt-6-astra',
         service_tier: 'default',
         prompt_cache_key: 'socratic-coach:coach:session-1',
-        prompt_cache_options: { mode: 'implicit', ttl: '30m' },
+        prompt_cache_options: { mode: 'explicit', ttl: '30m' },
         store: false,
         parallel_tool_calls: false,
         text: { verbosity: 'low' },

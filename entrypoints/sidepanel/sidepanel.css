@@ -202,10 +202,6 @@
   animation: mascot-breathe 1.7s ease-in-out infinite;
 }
 
-.conversation {
-  padding: 0;
-}
-
 .message {
   scroll-margin-top: calc(var(--coach-mascot-size) + var(--space-6));
   padding: var(--space-4) 0;
